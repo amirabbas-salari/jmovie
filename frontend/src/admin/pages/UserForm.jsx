@@ -1,248 +1,154 @@
 import { useEffect, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
-import {
-  createAdminUser,
-  getAdminUserById,
-  updateAdminUser,
-} from "../services/adminApi"
+import { Link, useNavigate, useParams } from "react-router-dom"
+import { ArrowRight, Loader2, Save, ShieldCheck } from "lucide-react"
+import { rolesApi, usersApi, getApiError, getFieldErrors } from "../services/adminApi"
+import { useAdmin } from "../context/AdminContext"
+import { ErrorBox, Field, PrimaryBtn, Spinner, Toggle, cardCls, inputCls } from "../components/ui"
 
-const initialForm = {
-  username: "",
-  email: "",
-  first_name: "",
-  last_name: "",
-  password: "",
-  is_active: true,
-  is_staff: false,
-  is_vip: false,
+const emptyForm = {
+  username: "", email: "", first_name: "", last_name: "", phone: "", password: "",
+  is_active: true, is_vip: false, is_staff: false, is_superuser: false, role_ids: [],
 }
 
 export default function UserForm() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const isEdit = Boolean(id)
-
-  const [form, setForm] = useState(initialForm)
-  const [errors, setErrors] = useState({})
-  const [generalError, setGeneralError] = useState("")
+  const navigate = useNavigate()
+  const { isSuperAdmin, me } = useAdmin()
+  const [form, setForm] = useState(emptyForm)
+  const [roles, setRoles] = useState([])
+  const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [fieldErrors, setFieldErrors] = useState({})
+
+  // نقش‌ها را فقط سوپرادمین می‌بیند/تغییر می‌دهد
+  useEffect(() => {
+    if (!isSuperAdmin) return
+    rolesApi.list({ page_size: 100 }).then((d) => setRoles(d.items)).catch(() => {})
+  }, [isSuperAdmin])
 
   useEffect(() => {
     if (!isEdit) return
-    getAdminUserById(id).then((data) => {
-      setForm({
-        username: data.username || "",
-        email: data.email || "",
-        first_name: data.first_name || "",
-        last_name: data.last_name || "",
-        password: "", // هیچ‌وقت prefill نمی‌شود
-        is_active: data.is_active === true,
-        is_staff: data.is_staff === true,
-        is_vip: data.is_vip === true,
+    let alive = true
+    usersApi.get(id)
+      .then((d) => {
+        if (!alive) return
+        setForm({
+          username: d.username || "", email: d.email || "", first_name: d.first_name || "",
+          last_name: d.last_name || "", phone: d.phone || "", password: "",
+          is_active: d.is_active !== false, is_vip: Boolean(d.is_vip),
+          is_staff: Boolean(d.is_staff), is_superuser: Boolean(d.is_superuser),
+          role_ids: (d.roles || []).map((r) => r.id),
+        })
       })
-    })
+      .catch(() => { if (alive) setError("بارگذاری کاربر با خطا مواجه شد.") })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
   }, [id, isEdit])
 
-  const handleChange = (e) => {
-    const { name, type, value, checked } = e.target
-    setForm((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }))
-  }
+  const set = (n) => (e) => { setForm((f) => ({ ...f, [n]: e.target.value })); setFieldErrors((p) => ({ ...p, [n]: undefined })) }
+  const toggleRole = (rid) =>
+    setForm((f) => ({ ...f, role_ids: f.role_ids.includes(rid) ? f.role_ids.filter((r) => r !== rid) : [...f.role_ids, rid] }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setSaving(true)
-    setErrors({})
-    setGeneralError("")
-
-    const payload = {
-      username: form.username,
-      email: form.email,
-      first_name: form.first_name,
-      last_name: form.last_name,
-      is_active: form.is_active,
-      is_staff: form.is_staff,
-      is_vip: form.is_vip,
-    }
-    if (form.password) payload.password = form.password
-
+    setSaving(true); setError(""); setFieldErrors({})
     try {
-      if (isEdit) {
-        await updateAdminUser(id, payload)
-      } else {
-        await createAdminUser(payload)
+      const payload = { ...form }
+      if (!payload.password) delete payload.password
+      if (!isSuperAdmin) {
+        // ادمین عادی هرگز این فیلدها را نمی‌فرستد؛ بک‌اند هم جلویش را می‌گیرد.
+        delete payload.is_staff; delete payload.is_superuser; delete payload.role_ids
       }
+      if (isEdit) await usersApi.update(id, payload); else await usersApi.create(payload)
       navigate("/admin/users")
     } catch (err) {
-      const data = err?.response?.data
-      if (data && typeof data === "object") {
-        setErrors(data)
-      } else {
-        setGeneralError("خطا در ذخیره کاربر")
-      }
-    } finally {
-      setSaving(false)
-    }
+      setFieldErrors(getFieldErrors(err))
+      setError(getApiError(err, "ذخیره‌ی کاربر با خطا مواجه شد."))
+    } finally { setSaving(false) }
   }
 
+  if (loading) return <Spinner />
+  const isSelf = isEdit && Number(id) === me?.id
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="max-w-lg mx-auto my-8 p-8 rounded-2xl border border-white/10
-                 bg-gradient-to-br from-indigo-500/10 to-white/[0.04]
-                 backdrop-blur-xl shadow-2xl text-gray-100"
-    >
+    <form onSubmit={handleSubmit} className="mx-auto max-w-3xl">
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-50 sm:text-2xl">{isEdit ? "ویرایش کاربر" : "افزودن کاربر"}</h1>
+          <p className="mt-1 text-sm text-zinc-500">اطلاعات حساب و سطح دسترسی</p>
+        </div>
+        <Link to="/admin/users" className="ms-auto inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/10">
+          <ArrowRight className="h-4 w-4" /> بازگشت
+        </Link>
+      </div>
+      <ErrorBox message={error} />
 
-      <h2 className="mb-6 text-xl font-bold bg-gradient-to-r from-indigo-500
-                    to-violet-500 bg-clip-text text-transparent">
-        {isEdit ? "ویرایش کاربر" : "افزودن کاربر"}
-      </h2>
+      <div className="space-y-5">
+        <section className={`${cardCls} p-5`}>
+          <h2 className="mb-4 font-bold text-zinc-100">اطلاعات حساب</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="نام کاربری *" error={fieldErrors.username}><input value={form.username} onChange={set("username")} className={inputCls} dir="ltr" required /></Field>
+            <Field label="ایمیل *" error={fieldErrors.email}><input type="email" value={form.email} onChange={set("email")} className={inputCls} dir="ltr" required /></Field>
+            <Field label="نام" error={fieldErrors.first_name}><input value={form.first_name} onChange={set("first_name")} className={inputCls} /></Field>
+            <Field label="نام خانوادگی" error={fieldErrors.last_name}><input value={form.last_name} onChange={set("last_name")} className={inputCls} /></Field>
+            <Field label="موبایل" error={fieldErrors.phone}><input value={form.phone} onChange={set("phone")} className={inputCls} dir="ltr" /></Field>
+            <Field label={isEdit ? "رمز عبور جدید (خالی = بدون تغییر)" : "رمز عبور *"} error={fieldErrors.password}>
+              <input type="password" value={form.password} onChange={set("password")} className={inputCls} dir="ltr" required={!isEdit} autoComplete="new-password" />
+            </Field>
+          </div>
+        </section>
 
-      <label className="block mb-4 text-sm text-gray-400 font-medium">
-        نام کاربری
-        <input
-          name="username"
-          value={form.username}
-          onChange={handleChange}
-          className="w-full mt-2 px-3.5 py-3 rounded-lg bg-white/[0.06]
-                    border border-white/10 text-gray-100 text-sm
-                    focus:outline-none focus:border-indigo-500
-                    focus:ring-2 focus:ring-indigo-500/20 transition"
-        />
-        {errors.username && <span className="block mt-1.5 text-xs text-red-500">{errors.username}</span>}
-      </label>
+        <section className={`${cardCls} space-y-3 p-5`}>
+          <h2 className="font-bold text-zinc-100">وضعیت</h2>
+          <Toggle label="حساب فعال" desc="کاربر غیرفعال نمی‌تواند وارد شود" checked={form.is_active} onChange={(v) => setForm((f) => ({ ...f, is_active: v }))} disabled={isSelf} />
+          <Toggle label="کاربر VIP" desc="دسترسی به لینک‌های دانلود VIP" checked={form.is_vip} onChange={(v) => setForm((f) => ({ ...f, is_vip: v }))} />
+        </section>
 
-      <label className="block mb-4 text-sm text-gray-400 font-medium">
-        ایمیل
-        <input
-          type="email"
-          name="email"
-          value={form.email}
-          onChange={handleChange}
-          className="w-full mt-2 px-3.5 py-3 rounded-lg bg-white/[0.06]
-                    border border-white/10 text-gray-100 text-sm
-                    focus:outline-none focus:border-indigo-500
-                    focus:ring-2 focus:ring-indigo-500/20 transition"
-        />
-        {errors.email && <span className="block mt-1.5 text-xs text-red-500">{errors.email}</span>}
-      </label>
+        {isSuperAdmin ? (
+          <section className="rounded-2xl border border-red-500/25 bg-red-500/[0.04] p-5">
+            <h2 className="mb-1 flex items-center gap-2 font-bold text-zinc-100">
+              <ShieldCheck className="h-5 w-5 text-red-400" /> سطح دسترسی — فقط سوپرادمین
+            </h2>
+            <p className="mb-4 text-xs leading-6 text-zinc-500">
+              «دسترسی به پنل» یعنی کاربر می‌تواند وارد پنل مدیریت شود، اما فقط در محدوده‌ی نقش‌هایی که این‌جا برایش انتخاب می‌کنید.
+              سوپرادمین به همه‌چیز دسترسی دارد و نیازی به نقش ندارد.
+            </p>
+            <div className="space-y-3">
+              <Toggle label="دسترسی به پنل مدیریت (Staff)" desc="شرط ورود به پنل" checked={form.is_staff} onChange={(v) => setForm((f) => ({ ...f, is_staff: v }))} disabled={isSelf} />
+              <Toggle label="سوپرادمین" desc="دسترسی کامل + تعیین سطح دسترسی بقیه" checked={form.is_superuser} onChange={(v) => setForm((f) => ({ ...f, is_superuser: v, is_staff: v ? true : f.is_staff }))} disabled={isSelf} />
+            </div>
 
-      {/* فیلدهای جفتی در یک ردیف */}
-      <div className="flex gap-3.5">
-        <label className="flex-1 block mb-4 text-sm text-gray-400 font-medium">
-          نام
-          <input
-            name="first_name"
-            value={form.first_name}
-            onChange={handleChange}
-            className="w-full mt-2 px-3.5 py-3 rounded-lg bg-white/[0.06]
-                      border border-white/10 text-gray-100 text-sm
-                      focus:outline-none focus:border-indigo-500
-                      focus:ring-2 focus:ring-indigo-500/20 transition"
-          />
-        </label>
-        <label className="flex-1 block mb-4 text-sm text-gray-400 font-medium">
-          نام خانوادگی
-          <input
-            name="last_name"
-            value={form.last_name}
-            onChange={handleChange}
-            className="w-full mt-2 px-3.5 py-3 rounded-lg bg-white/[0.06]
-                      border border-white/10 text-gray-100 text-sm
-                      focus:outline-none focus:border-indigo-500
-                      focus:ring-2 focus:ring-indigo-500/20 transition"
-          />
-        </label>
+            <p className="mb-2 mt-5 text-xs font-medium text-zinc-400">نقش‌های این کاربر:</p>
+            {roles.length === 0
+              ? <p className="text-xs text-zinc-500">هنوز نقشی ساخته نشده است. از بخش «نقش‌ها و دسترسی‌ها» نقش بسازید (یا دستور create_admin_roles را اجرا کنید).</p>
+              : (
+                <div className="flex flex-wrap gap-2">
+                  {roles.map((r) => {
+                    const active = form.role_ids.includes(r.id)
+                    return (
+                      <button key={r.id} type="button" onClick={() => toggleRole(r.id)}
+                        className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${active ? "bg-red-600 text-white" : "border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"}`}>
+                        {r.name} <span className="opacity-70">({r.users_count} نفر)</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+          </section>
+        ) : (
+          <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs leading-6 text-zinc-500">
+            تعیین سطح دسترسی (نقش، Staff و سوپرادمین) فقط توسط سوپرادمین انجام می‌شود.
+          </p>
+        )}
       </div>
 
-      <label className="block mb-4 text-sm text-gray-400 font-medium">
-        رمز عبور {isEdit && "(خالی بذار اگه نمی‌خوای تغییر کنه)"}
-        <input
-          type="password"
-          name="password"
-          value={form.password}
-          onChange={handleChange}
-          className="w-full mt-2 px-3.5 py-3 rounded-lg bg-white/[0.06]
-                    border border-white/10 text-gray-100 text-sm
-                    focus:outline-none focus:border-indigo-500
-                    focus:ring-2 focus:ring-indigo-500/20 transition"
-        />
-        {errors.password && <span className="block mt-1.5 text-xs text-red-500">{errors.password}</span>}
-      </label>
-
-
-
-      <div className="flex gap-3 mb-5">
-        <label className="flex-1 flex items-center gap-2 px-3.5 py-2.5 rounded-lg
-                            bg-white/[0.06] border border-white/10 cursor-pointer
-                            text-sm hover:border-indigo-500 transition">
-            <input
-            type="checkbox"
-            name="is_active"
-            checked={form.is_active}
-            onChange={handleChange}
-            className="w-[18px] h-[18px] accent-indigo-500 cursor-pointer"
-            />
-            فعال
-        </label>
-
-        <label className="flex-1 flex items-center gap-2 px-3.5 py-2.5 rounded-lg
-                            bg-white/[0.06] border border-white/10 cursor-pointer
-                            text-sm hover:border-indigo-500 transition">
-            <input
-            type="checkbox"
-            name="is_staff"
-            checked={form.is_staff}
-            onChange={handleChange}
-            className="w-[18px] h-[18px] accent-indigo-500 cursor-pointer"
-            />
-            کارمند (staff)
-        </label>
-        
-        <label className="flex-1 flex items-center gap-2 px-3.5 py-2.5 rounded-lg
-                            bg-white/[0.06] border border-white/10 cursor-pointer
-                            text-sm hover:border-indigo-500 transition">
-            <input
-            type="checkbox"
-            name="is_vip"
-            checked={form.is_vip}
-            onChange={handleChange}
-            className="w-[18px] h-[18px] accent-indigo-500 cursor-pointer"
-            />
-            vip
-        </label>
-        
-        </div>
-
-        {generalError && <p className="mb-4 text-sm text-red-500">{generalError}</p>}
-
-        <div className="flex gap-3">
-        <button
-            type="submit"
-            disabled={saving}
-            className="flex-1 py-3 rounded-lg font-semibold text-white
-                    bg-gradient-to-br from-indigo-500 to-violet-500
-                    hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/40
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                    transition-all"
-        >
-            {saving ? "در حال ذخیره..." : "ذخیره"}
-        </button>
-        <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="flex-1 py-3 rounded-lg font-semibold text-gray-400
-                    bg-white/[0.06] border border-white/10
-                    hover:text-gray-100 hover:border-gray-400 transition-all"
-        >
-            انصراف
-        </button>
-        </div>
-
-
-
+      <div className="sticky bottom-4 mt-6 flex justify-end">
+        <PrimaryBtn type="submit" disabled={saving} className="!px-8 !py-3">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} ذخیره
+        </PrimaryBtn>
+      </div>
     </form>
   )
 }

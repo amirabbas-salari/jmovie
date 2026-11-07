@@ -1,430 +1,244 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
-import {
-  Film, Type, Link as LinkIcon, Calendar, Clock, Star,
-  Image as ImageIcon, Tags, FileText, ArrowRight, Save, X, Check, Upload
-} from "lucide-react"
-import {
-  createAdminMovie,
-  getAdminMovieById,
-  updateAdminMovie,
-  getAdminGenres,
-} from "../services/adminApi"
+import { ArrowRight, Loader2, Save } from "lucide-react"
+import { genresApi, moviesApi, getApiError, getFieldErrors } from "../services/adminApi"
+import { CastEditor, DownloadsManager, GalleryEditor } from "../components/editors"
+import { ErrorBox, Field, PrimaryBtn, Spinner, Toggle, cardCls, inputCls } from "../components/ui"
 
-const initialForm = {
-  title: "",
-  original_title: "",
-  slug: "",
-  description: "",
-  release_date: "",
-  runtime: "",
-  imdb_rating: "",
-  imdb_id: "",
-  poster: null,
-  backdrop: null,
-  poster_url: "",
-  backdrop_url: "",
-  trailer_url: "",
-  is_active: true,
-  is_published: true,
-  genres: [],
+const emptyForm = {
+  title: "", original_title: "", slug: "", imdb_id: "", tmdb_id: "", country: "",
+  description: "", release_date: "", runtime: "", imdb_rating: "", imdb_votes: "",
+  views: 0, poster_url: "", backdrop_url: "", is_active: true, genre_ids: [],
 }
 
-export default function MovieForm() {
-  const navigate = useNavigate()
-  const { id } = useParams()
-  const isEditMode = Boolean(id)
+const TABS = [
+  { id: "main", label: "اطلاعات اصلی" },
+  { id: "cast", label: "عوامل و بازیگران" },
+  { id: "gallery", label: "گالری" },
+  { id: "downloads", label: "لینک‌های دانلود" },
+]
 
-  const [form, setForm] = useState(initialForm)
+export default function MovieForm() {
+  const { id } = useParams()
+  const isEdit = Boolean(id)
+  const navigate = useNavigate()
+  const [tab, setTab] = useState("main")
+  const [form, setForm] = useState(emptyForm)
+  const [posterFile, setPosterFile] = useState(null)
+  const [backdropFile, setBackdropFile] = useState(null)
+  const [cast, setCast] = useState([])
+  const [gallery, setGallery] = useState([])
   const [genres, setGenres] = useState([])
-  const [loading, setLoading] = useState(isEditMode)
+  const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [fieldErrors, setFieldErrors] = useState({})
 
-  const pageTitle = useMemo(
-    () => (isEditMode ? "ویرایش فیلم" : "افزودن فیلم جدید"),
-    [isEditMode]
-  )
-
   useEffect(() => {
-    loadGenres()
+    genresApi.list({ page_size: 100 }).then((d) => setGenres(d.items)).catch(() => {})
   }, [])
 
   useEffect(() => {
-    if (!isEditMode) return
-    const loadMovie = async () => {
-      try {
-        setLoading(true)
-        setError("")
-        const data = await getAdminMovieById(id)
+    if (!isEdit) return
+    let alive = true
+    moviesApi.get(id)
+      .then((data) => {
+        if (!alive) return
         setForm({
-          title: data.title || "",
-          original_title: data.original_title || "",
-          slug: data.slug || "",
-          description: data.description || "",
-          release_date: data.release_date || "",
-          runtime: data.runtime || "",
-          imdb_rating: data.imdb_rating || "",
-          imdb_id: data.imdb_id || "",
-          poster: null,
-          backdrop: null,
-          poster_url: data.poster_url || data.poster || "",
-          backdrop_url: data.backdrop_url || data.backdrop || "",
-          trailer_url: data.trailer_url || "",
+          title: data.title || "", original_title: data.original_title || "",
+          slug: data.slug || "", imdb_id: data.imdb_id || "",
+          tmdb_id: data.tmdb_id ?? "", country: data.country || "",
+          description: data.description || "", release_date: data.release_date || "",
+          runtime: data.runtime ?? "", imdb_rating: data.imdb_rating ?? "",
+          imdb_votes: data.imdb_votes ?? "", views: data.views ?? 0,
+          poster_url: data.poster_url || "", backdrop_url: data.backdrop_url || "",
           is_active: data.is_active !== false,
-          is_published: data.is_published !== false,
-          genres: Array.isArray(data.genres)
-            ? data.genres.map((g) => Number(g?.id ?? g))
-            : [],
+          genre_ids: (data.genres || []).map((g) => g.id),
         })
-      } catch (err) {
-        console.error("Load movie error:", err)
-        setError("خطا در دریافت اطلاعات فیلم")
-      } finally {
-        setLoading(false)
+        setCast((data.cast || []).map((c) => ({
+          person: c.person, role: c.role, character_name: c.character_name || "",
+        })))
+        setGallery((data.gallery || []).map((g) => ({
+          image_url: g.image_url || "", caption: g.caption || "", order: g.order || 0,
+        })))
+      })
+      .catch(() => { if (alive) setError("بارگذاری فیلم با خطا مواجه شد.") })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [id, isEdit])
+
+  const set = (name) => (e) => {
+    setForm((f) => ({ ...f, [name]: e.target.value }))
+    setFieldErrors((p) => ({ ...p, [name]: undefined }))
+  }
+  const toggleGenre = (gid) =>
+    setForm((f) => ({ ...f, genre_ids: f.genre_ids.includes(gid) ? f.genre_ids.filter((g) => g !== gid) : [...f.genre_ids, gid] }))
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSaving(true); setError(""); setFieldErrors({})
+    try {
+      // مرحله ۱: اطلاعات اصلی (+ فایل پوستر/بک‌گراند در صورت انتخاب)
+      let savedId = id
+      const hasFiles = posterFile || backdropFile
+      if (hasFiles) {
+        const fd = new FormData()
+        Object.entries(form).forEach(([k, v]) => {
+          if (k === "genre_ids") v.forEach((g) => fd.append("genre_ids", g))
+          else if (v !== "" && v !== null && v !== undefined) fd.append(k, v)
+        })
+        if (posterFile) fd.append("poster", posterFile)
+        if (backdropFile) fd.append("backdrop", backdropFile)
+        savedId = isEdit ? (await moviesApi.update(id, fd)).id : (await moviesApi.create(fd)).id
+      } else {
+        const payload = { ...form, tmdb_id: form.tmdb_id === "" ? null : Number(form.tmdb_id) }
+        savedId = isEdit ? (await moviesApi.update(id, payload)).id : (await moviesApi.create(payload)).id
       }
-    }
-    loadMovie()
-  }, [id, isEditMode])
-
-  const loadGenres = async () => {
-    try {
-      const data = await getAdminGenres()
-      setGenres(Array.isArray(data) ? data : data.results || [])
-    } catch (err) {
-      console.error("Load genres error:", err)
-    }
-  }
-
-  const handleChange = (event) => {
-    const { name, value, type, checked, files } = event.target
-    let newValue
-    if (type === "checkbox") newValue = checked
-    else if (type === "file") newValue = files?.[0] || null
-    else newValue = value
-
-    setForm((prev) => ({ ...prev, [name]: newValue }))
-    setFieldErrors((prev) => ({ ...prev, [name]: undefined }))
-  }
-
-  const setBool = (name, val) =>
-    setForm((prev) => ({ ...prev, [name]: val }))
-
-  const toggleGenre = (genreId) => {
-    const gid = Number(genreId)
-    setForm((prev) => ({
-      ...prev,
-      genres: prev.genres.includes(gid)
-        ? prev.genres.filter((g) => g !== gid)
-        : [...prev.genres, gid],
-    }))
-    setFieldErrors((prev) => ({ ...prev, genres: undefined }))
-  }
-
-  const buildPayload = () => {
-    const fd = new FormData()
-    fd.append("title", form.title || "")
-    fd.append("original_title", form.original_title || "")
-    fd.append("slug", form.slug || "")
-    fd.append("description", form.description || "")
-    fd.append("release_date", form.release_date || "")
-    fd.append("runtime", form.runtime ? String(Number(form.runtime)) : "")
-    fd.append("imdb_rating", form.imdb_rating ? String(Number(form.imdb_rating)) : "")
-    fd.append("imdb_id", form.imdb_id || "")
-    fd.append("trailer_url", form.trailer_url || "")
-    fd.append("is_active", String(form.is_active))
-    fd.append("is_published", String(form.is_published))
-    form.genres
-      .filter((g) => Number.isFinite(Number(g)))
-      .forEach((g) => fd.append("genre_ids", String(Number(g))))
-
-    if (form.poster instanceof File) fd.append("poster", form.poster)
-      if (form.backdrop instanceof File) fd.append("backdrop", form.backdrop)
-    if (form.poster_url) fd.append("poster_url", form.poster_url)
-      if (form.backdrop_url) fd.append("backdrop_url", form.backdrop_url)
-    return fd
-}
-
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    try {
-      setSaving(true)
-      setError("")
-      setFieldErrors({})
-      const payload = buildPayload()
-      if (isEditMode) await updateAdminMovie(id, payload)
-      else await createAdminMovie(payload)
+      // مرحله ۲: عوامل و گالری به‌صورت JSON (multipart ساختار تو در تو را پشتیبانی نمی‌کند)
+      const castItems = cast.filter((c) => c.person?.id).map((c) => ({
+        person: c.person.id, role: c.role, character_name: c.character_name || "",
+      }))
+      await moviesApi.update(savedId, { cast_items: castItems, gallery_items: gallery })
       navigate("/admin/movies")
     } catch (err) {
-      console.error("Save movie error:", err)
-      const data = err?.response?.data
-      if (data && typeof data === "object") {
-        setFieldErrors(data)
-        setError("لطفاً خطاهای فرم را بررسی کن.")
-      } else {
-        setError("خطا در ذخیره فیلم")
-      }
+      setFieldErrors(getFieldErrors(err))
+      setError(getApiError(err, "ذخیره‌ی فیلم با خطا مواجه شد."))
     } finally {
       setSaving(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="flex items-center gap-3 text-zinc-400">
-          <div className="h-5 w-5 rounded-full border-2 border-red-500 border-t-transparent animate-spin" />
-          در حال دریافت اطلاعات فیلم...
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <Spinner text="در حال دریافت اطلاعات فیلم..." />
 
-  const posterPreview =
-    form.poster instanceof File ? URL.createObjectURL(form.poster) : form.poster_url
-  const backdropPreview =
-    form.backdrop instanceof File ? URL.createObjectURL(form.backdrop) : form.backdrop_url
+  const posterPreview = posterFile ? URL.createObjectURL(posterFile) : form.poster_url
+  const backdropPreview = backdropFile ? URL.createObjectURL(backdropFile) : form.backdrop_url
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#0a0a0f] text-white p-4 md:p-8">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <div className="grid place-items-center h-12 w-12 rounded-2xl bg-gradient-to-br from-red-500 to-purple-600 shadow-lg shadow-red-500/20">
-              <Film size={24} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-l from-white to-zinc-400 bg-clip-text text-transparent">
-                {pageTitle}
-              </h1>
-              <p className="text-sm text-zinc-500 mt-0.5">اطلاعات فیلم را وارد و ذخیره کن</p>
-            </div>
-          </div>
-          <Link
-            to="/admin/movies"
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.07] transition-all"
-          >
-            <ArrowRight size={16} />
-            بازگشت به لیست
-          </Link>
+    <form onSubmit={handleSubmit}>
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-50 sm:text-2xl">{isEdit ? "ویرایش فیلم" : "افزودن فیلم جدید"}</h1>
+          <p className="mt-1 text-sm text-zinc-500">همه‌ی اطلاعات فیلم از همین‌جا قابل تغییر است.</p>
         </div>
+        <Link to="/admin/movies" className="ms-auto inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/10">
+          <ArrowRight className="h-4 w-4" /> بازگشت به لیست
+        </Link>
+      </div>
 
-        {error && (
-          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-red-300 backdrop-blur-sm">
-            <X size={18} />
-            {error}
-          </div>
-        )}
+      <ErrorBox message={error} />
 
-        <form onSubmit={handleSubmit} dir="rtl" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* ===== Sidebar: previews ===== */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 backdrop-blur-xl">
-              <SectionTitle icon={ImageIcon} title="تصاویر" />
-              <PosterUpload preview={posterPreview} form={form} onChange={handleChange} />
-              <BackdropUpload preview={backdropPreview} form={form} onChange={handleChange} />
-            </div>
+      <div className="mb-5 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+        {TABS.map((t) => (
+          <button key={t.id} type="button" onClick={() => setTab(t.id)}
+            className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition ${tab === t.id ? "bg-red-600 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 backdrop-blur-xl space-y-4">
-              <SectionTitle icon={Check} title="وضعیت انتشار" />
-              <Toggle label="فعال باشد" desc="نمایش در سایت" checked={form.is_active} onChange={(v) => setBool("is_active", v)} />
-              <Toggle label="منتشر شده" desc="در دسترس کاربران" checked={form.is_published} onChange={(v) => setBool("is_published", v)} />
-            </div>
-          </div>
-
-          {/* ===== Main fields ===== */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 md:p-6 backdrop-blur-xl">
-              <SectionTitle icon={Type} title="اطلاعات اصلی" />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field icon={Type} label="عنوان فارسی" name="title" value={form.title} onChange={handleChange} error={fieldErrors.title} required />
-                <Field icon={Type} label="عنوان انگلیسی" name="original_title" value={form.original_title} onChange={handleChange} error={fieldErrors.original_title} />
-                <Field icon={LinkIcon} label="Slug" name="slug" value={form.slug} onChange={handleChange} error={fieldErrors.slug} placeholder="example-movie-2025" />
-                <Field icon={Star} label="IMDb ID" name="imdb_id" value={form.imdb_id} onChange={handleChange} error={fieldErrors.imdb_id} placeholder="tt1234567" />
-                <Field icon={Calendar} label="تاریخ انتشار" name="release_date" type="date" value={form.release_date} onChange={handleChange} error={fieldErrors.release_date} />
-                <Field icon={Clock} label="مدت (دقیقه)" name="runtime" type="number" value={form.runtime} onChange={handleChange} error={fieldErrors.runtime} placeholder="120" />
-                <Field icon={Star} label="امتیاز" name="imdb_rating" type="number" step="0.1" value={form.imdb_rating} onChange={handleChange} error={fieldErrors.imdb_rating} placeholder="8.5" />
-                <Field icon={LinkIcon} label="لینک تریلر" name="trailer_url" value={form.trailer_url} onChange={handleChange} error={fieldErrors.trailer_url} />
+      {tab === "main" && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="space-y-5 lg:col-span-2">
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">اطلاعات پایه</h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="عنوان فارسی *" error={fieldErrors.title}><input value={form.title} onChange={set("title")} className={inputCls} required /></Field>
+                <Field label="عنوان اصلی (انگلیسی)" error={fieldErrors.original_title}><input value={form.original_title} onChange={set("original_title")} className={inputCls} dir="ltr" /></Field>
+                <Field label="IMDb ID *" error={fieldErrors.imdb_id} hint="مثل tt0816692"><input value={form.imdb_id} onChange={set("imdb_id")} className={inputCls} dir="ltr" required /></Field>
+                <Field label="TMDB ID" error={fieldErrors.tmdb_id}><input type="number" value={form.tmdb_id} onChange={set("tmdb_id")} className={inputCls} dir="ltr" /></Field>
+                <Field label="اسلاگ" error={fieldErrors.slug} hint="خالی بماند خودکار ساخته می‌شود"><input value={form.slug} onChange={set("slug")} className={inputCls} dir="ltr" /></Field>
+                <Field label="کشور" error={fieldErrors.country}><input value={form.country} onChange={set("country")} className={inputCls} /></Field>
+                <div className="sm:col-span-2">
+                  <Field label="خلاصه داستان" error={fieldErrors.description}>
+                    <textarea rows={5} value={form.description} onChange={set("description")} className={`${inputCls} resize-y`} />
+                  </Field>
+                </div>
               </div>
-            </div>
+            </section>
 
-            <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 md:p-6 backdrop-blur-xl">
-              <SectionTitle icon={Tags} title="ژانرها" />
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">تاریخ، امتیاز و آمار</h2>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="تاریخ انتشار" error={fieldErrors.release_date}><input type="date" value={form.release_date} onChange={set("release_date")} className={inputCls} /></Field>
+                <Field label="مدت (دقیقه) *" error={fieldErrors.runtime}><input type="number" min="0" value={form.runtime} onChange={set("runtime")} className={inputCls} required /></Field>
+                <Field label="امتیاز IMDb" error={fieldErrors.imdb_rating}><input type="number" step="0.1" min="0" max="10" value={form.imdb_rating} onChange={set("imdb_rating")} className={inputCls} /></Field>
+                <Field label="تعداد رأی IMDb" error={fieldErrors.imdb_votes}><input type="number" min="0" value={form.imdb_votes} onChange={set("imdb_votes")} className={inputCls} /></Field>
+                <Field label="بازدید" error={fieldErrors.views}><input type="number" min="0" value={form.views} onChange={set("views")} className={inputCls} /></Field>
+              </div>
+            </section>
+
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">ژانرها</h2>
               <div className="flex flex-wrap gap-2">
                 {genres.map((g) => {
-                  const gid = Number(g.id)
-                  const active = form.genres.includes(gid)
+                  const active = form.genre_ids.includes(g.id)
                   return (
-                    <button
-                      key={gid} type="button" onClick={() => toggleGenre(gid)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                        active
-                          ? "bg-gradient-to-l from-red-500 to-purple-600 text-white shadow-lg shadow-red-500/25 scale-105"
-                          : "bg-white/[0.04] text-zinc-400 border border-white/10 hover:bg-white/[0.08] hover:text-white"
-                      }`}
-                    >
+                    <button key={g.id} type="button" onClick={() => toggleGenre(g.id)}
+                      className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${active ? "bg-red-600 text-white shadow-[0_6px_16px_-6px_rgba(193,18,31,0.8)]" : "border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"}`}>
                       {g.name}
                     </button>
                   )
                 })}
-
+                {genres.length === 0 && <span className="text-xs text-zinc-500">ژانری ثبت نشده است.</span>}
               </div>
-              <FieldError error={fieldErrors.genres} />
-            </div>
-
-            <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-5 md:p-6 backdrop-blur-xl">
-              <SectionTitle icon={FileText} title="خلاصه داستان" />
-              <textarea
-                name="description" value={form.description} onChange={handleChange} rows={6}
-                className="w-full resize-y rounded-2xl bg-black/30 border border-white/10 px-4 py-3 text-sm outline-none focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 transition-all"
-                placeholder="خلاصه‌ای از داستان فیلم بنویس..."
-              />
-              <FieldError error={fieldErrors.description} />
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col-reverse gap-3 md:flex-row md:justify-end">
-              <Link
-                to="/admin/movies"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm text-zinc-300 hover:bg-white/[0.07] transition-all"
-              >
-                <X size={16} /> انصراف
-              </Link>
-              <button
-                type="submit" disabled={saving}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-red-500 to-purple-600 px-8 py-3 text-sm font-semibold text-white shadow-lg shadow-red-500/25 hover:shadow-red-500/40 hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all"
-              >
-                {saving ? (
-                  <>
-                    <div className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                    در حال ذخیره...
-                  </>
-                ) : (
-                  <><Save size={16} /> ذخیره فیلم</>
-                )}
-              </button>
-            </div>
+            </section>
           </div>
-        </form>
-      </div>
-    </div>
-  )
-}
 
-
-
-function SectionTitle({ icon: Icon, title }) {
-  return (
-    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/5">
-      <Icon size={18} className="text-red-400" />
-      <h3 className="text-sm font-semibold text-zinc-200">{title}</h3>
-    </div>
-  )
-}
-
-function Field({ icon: Icon, label, name, value, onChange, error, type = "text", required, placeholder = "", step }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-400">
-        {Icon && <Icon size={13} />}
-        {label}
-        {required && <span className="text-red-400">*</span>}
-      </label>
-      <input
-        type={type} name={name} value={value} onChange={onChange}
-        required={required} placeholder={placeholder} step={step}
-        className="w-full rounded-xl bg-black/30 border border-white/10 px-4 py-2.5 text-sm text-white outline-none focus:border-red-500/50 focus:ring-2 focus:ring-red-500/20 transition-all [color-scheme:dark]"
-      />
-      <FieldError error={error} />
-    </div>
-  )
-}
-
-function Toggle({ label, desc, checked, onChange }) {
-  return (
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm text-zinc-200">{label}</p>
-        {desc && <p className="text-xs text-zinc-500">{desc}</p>}
-      </div>
-      <button
-        type="button" onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 rounded-full transition-colors duration-300 ${
-          checked ? "bg-gradient-to-l from-red-500 to-purple-600" : "bg-zinc-700"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-md transition-all duration-300 ${
-            checked ? "right-0.5" : "right-[22px]"
-          }`}
-        />
-      </button>
-    </div>
-  )
-}
-
-function PosterUpload({ preview, form, onChange }) {
-  return (
-    <div className="mb-5">
-      <label className="block text-xs text-zinc-400 mb-2">پوستر (عمودی)</label>
-      <div className="group relative aspect-[2/3] rounded-2xl overflow-hidden border-2 border-dashed border-white/10 hover:border-red-500/50 bg-black/30 transition-all">
-        {preview ? (
-          <img src={preview} alt="poster" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center text-zinc-500">
-            <Upload size={28} className="mb-2" />
-            <span className="text-xs">انتخاب پوستر</span>
+          <div className="space-y-5">
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">تصاویر</h2>
+              <div className="space-y-5">
+                <div>
+                  <p className="mb-2 text-xs text-zinc-400">پوستر</p>
+                  {posterPreview && <img src={posterPreview} alt="پوستر" className="mb-2 aspect-[2/3] w-32 rounded-xl object-cover" />}
+                  <input type="file" accept="image/*" onChange={(e) => setPosterFile(e.target.files?.[0] || null)} className="mb-2 block w-full text-xs text-zinc-400 file:ml-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-zinc-200" />
+                  <input value={form.poster_url} onChange={set("poster_url")} placeholder="یا لینک پوستر (TMDB)" dir="ltr" className={inputCls} />
+                </div>
+                <div>
+                  <p className="mb-2 text-xs text-zinc-400">بک‌گراند</p>
+                  {backdropPreview && <img src={backdropPreview} alt="بک‌گراند" className="mb-2 aspect-video w-full rounded-xl object-cover" />}
+                  <input type="file" accept="image/*" onChange={(e) => setBackdropFile(e.target.files?.[0] || null)} className="mb-2 block w-full text-xs text-zinc-400 file:ml-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-zinc-200" />
+                  <input value={form.backdrop_url} onChange={set("backdrop_url")} placeholder="یا لینک بک‌گراند" dir="ltr" className={inputCls} />
+                </div>
+              </div>
+            </section>
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">وضعیت</h2>
+              <Toggle label="فعال" desc="در سایت نمایش داده شود" checked={form.is_active} onChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
+            </section>
           </div>
-        )}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors grid place-items-center opacity-0 group-hover:opacity-100">
-          <Upload size={24} className="text-white" />
         </div>
-        <input type="file" name="poster" accept="image/*" onChange={onChange} className="absolute inset-0 opacity-0 cursor-pointer" />
-      </div>
-      <input
-        type="url" name="poster_url" value={form.poster_url} onChange={onChange}
-        placeholder="یا لینک تصویر..."
-        className="mt-2 w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2 text-xs text-white outline-none focus:border-red-500/50 transition-all"
-      />
-    </div>
-  )
-}
+      )}
 
-function BackdropUpload({ preview, form, onChange }) {
-  return (
-    <div>
-      <label className="block text-xs text-zinc-400 mb-2">بک‌دراپ (افقی)</label>
-      <div className="group relative aspect-video rounded-2xl overflow-hidden border-2 border-dashed border-white/10 hover:border-red-500/50 bg-black/30 transition-all">
-        {preview ? (
-          <img src={preview} alt="backdrop" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center text-zinc-500">
-            <ImageIcon size={24} className="mb-1" />
-            <span className="text-xs">انتخاب بک‌دراپ</span>
-          </div>
-        )}
-        <input type="file" name="backdrop" accept="image/*" onChange={onChange} className="absolute inset-0 opacity-0 cursor-pointer" />
-      </div>
-      <input
-        type="url" name="backdrop_url" value={form.backdrop_url} onChange={onChange}
-        placeholder="یا لینک تصویر..."
-        className="mt-2 w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2 text-xs text-white outline-none focus:border-red-500/50 transition-all"
-      />
-    </div>
-  )
-}
+      {tab === "cast" && (
+        <section className={`${cardCls} p-5`}>
+          <h2 className="mb-1 font-bold text-zinc-100">عوامل و بازیگران</h2>
+          <p className="mb-4 text-xs text-zinc-500">با ذخیره‌ی فرم، این لیست جایگزین عوامل فعلی می‌شود.</p>
+          <CastEditor items={cast} onChange={setCast} />
+        </section>
+      )}
 
-function FieldError({ error }) {
-  if (!error) return null
-  const items = Array.isArray(error) ? error : [error]
-  return (
-    <div className="space-y-1">
-      {items.map((item, i) => (
-        <p key={i} className="text-xs text-red-400">{String(item)}</p>
-      ))}
-    </div>
+      {tab === "gallery" && (
+        <section className={`${cardCls} p-5`}>
+          <h2 className="mb-1 font-bold text-zinc-100">گالری تصاویر</h2>
+          <p className="mb-4 text-xs text-zinc-500">با ذخیره‌ی فرم، این لیست جایگزین گالری فعلی می‌شود.</p>
+          <GalleryEditor items={gallery} onChange={setGallery} />
+        </section>
+      )}
+
+      {tab === "downloads" && (
+        <section className={`${cardCls} p-5`}>
+          <h2 className="mb-4 font-bold text-zinc-100">لینک‌های دانلود فیلم</h2>
+          <DownloadsManager targetType="movie" objectId={id} />
+        </section>
+      )}
+
+      <div className="sticky bottom-4 mt-6 flex justify-end">
+        <PrimaryBtn type="submit" disabled={saving} className="!px-8 !py-3 shadow-2xl">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {isEdit ? "ذخیره‌ی تغییرات" : "ساخت فیلم"}
+        </PrimaryBtn>
+      </div>
+    </form>
   )
 }

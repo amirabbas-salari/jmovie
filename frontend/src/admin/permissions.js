@@ -1,0 +1,58 @@
+// مجوزهای پنل — دقیقاً معادل مجوزهای داخلی جنگو در بک‌اند (app.codename)
+// سوپرادمین permissions=["*"] دارد و همه‌چیز برایش باز است.
+export const P = {
+  movieView: "movies.view_movie",
+  movieAdd: "movies.add_movie",
+  movieChange: "movies.change_movie",
+  movieDelete: "movies.delete_movie",
+  seriesView: "series.view_series",
+  seriesAdd: "series.add_series",
+  seriesChange: "series.change_series",
+  seriesDelete: "series.delete_series",
+  seasonChange: "series.change_season",
+  episodeChange: "series.change_episode",
+  personView: "people.view_person",
+  personAdd: "people.add_person",
+  personChange: "people.change_person",
+  personDelete: "people.delete_person",
+  genreView: "genres.view_genre",
+  genreAdd: "genres.add_genre",
+  genreChange: "genres.change_genre",
+  genreDelete: "genres.delete_genre",
+  collectionView: "collection.view_collection",
+  collectionAdd: "collection.add_collection",
+  collectionChange: "collection.change_collection",
+  collectionDelete: "collection.delete_collection",
+  downloadView: "downloads.view_download",
+  downloadAdd: "downloads.add_download",
+  downloadChange: "downloads.change_download",
+  downloadDelete: "downloads.delete_download",
+  commentView: "comments.view_comment",
+  commentChange: "comments.change_comment",
+  commentDelete: "comments.delete_comment",
+  userView: "accounts.view_user",
+  userAdd: "accounts.add_user",
+  userChange: "accounts.change_user",
+  userDelete: "accounts.delete_user",
+}
+
+// برچسب فارسی گروه‌های مجوز در صفحه‌ی «نقش‌ها»
+export const APP_LABELS = {
+  movies: "فیلم‌ها",
+  series: "سریال‌ها",
+  genres: "ژانرها",
+  people: "افراد (بازیگران)",
+  collection: "کالکشن‌ها",
+  downloads: "لینک‌های دانلود",
+  comments: "نظرات",
+  accounts: "کاربران",
+  adminapi: "پنل مدیریت",
+  auth: "نقش‌ها و گروه‌ها",
+}
+
+export const VERB_LABELS = {
+  view: "مشاهده",
+  add: "افزودن",
+  change: "ویرایش",
+  delete: "حذف",
+}
