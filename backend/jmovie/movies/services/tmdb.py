@@ -212,3 +212,16 @@ class TMDBClient:
 
         response.raise_for_status()
         return response.json()
+
+    # --- جزئیات کامل برای «دریافت خودکار» پنل مدیریت (همراه عوامل و آی‌دی‌های خارجی) ---
+    def movie_full_details(self, tmdb_id, language="fa-IR"):
+        return self._get(
+            f"movie/{tmdb_id}",
+            {"language": language, "append_to_response": "credits,external_ids"},
+        )
+
+    def tv_full_details(self, tmdb_id, language="fa-IR"):
+        return self._get(
+            f"tv/{tmdb_id}",
+            {"language": language, "append_to_response": "credits,external_ids"},
+        )

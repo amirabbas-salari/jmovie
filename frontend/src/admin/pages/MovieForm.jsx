@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { ArrowRight, Loader2, Save } from "lucide-react"
 import { genresApi, moviesApi, getApiError, getFieldErrors } from "../services/adminApi"
 import { CastEditor, DownloadsManager, GalleryEditor } from "../components/editors"
+import TmdbLookup from "../components/TmdbLookup"
 import { ErrorBox, Field, PrimaryBtn, Spinner, Toggle, cardCls, inputCls } from "../components/ui"
 
 const emptyForm = {
@@ -74,6 +75,27 @@ export default function MovieForm() {
   const toggleGenre = (gid) =>
     setForm((f) => ({ ...f, genre_ids: f.genre_ids.includes(gid) ? f.genre_ids.filter((g) => g !== gid) : [...f.genre_ids, gid] }))
 
+  // پر کردن فرم از TMDB: فقط فیلدهای خالی پر می‌شوند تا ویرایش دستی ادمین پاک نشود
+  const applyTmdb = (data, genreIds, castItems) => {
+    setForm((f) => ({
+      ...f,
+      title: f.title || data.title || "",
+      original_title: f.original_title || data.original_title || "",
+      imdb_id: data.imdb_id || f.imdb_id,
+      tmdb_id: data.tmdb_id ?? f.tmdb_id,
+      country: f.country || data.country || "",
+      description: f.description || data.description || "",
+      release_date: f.release_date || data.release_date || "",
+      runtime: f.runtime === "" ? (data.runtime ?? "") : f.runtime,
+      imdb_rating: f.imdb_rating === "" ? (data.imdb_rating ?? "") : f.imdb_rating,
+      imdb_votes: f.imdb_votes === "" ? (data.imdb_votes ?? "") : f.imdb_votes,
+      poster_url: f.poster_url || data.poster_url || "",
+      backdrop_url: f.backdrop_url || data.backdrop_url || "",
+      genre_ids: [...new Set([...f.genre_ids, ...genreIds])],
+    }))
+    if (castItems.length) setCast(castItems)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true); setError(""); setFieldErrors({})
@@ -126,6 +148,8 @@ export default function MovieForm() {
       </div>
 
       <ErrorBox message={error} />
+
+      <TmdbLookup mediaType="movie" onApply={applyTmdb} />
 
       <div className="mb-5 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1">
         {TABS.map((t) => (

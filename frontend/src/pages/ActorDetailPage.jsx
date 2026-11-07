@@ -12,7 +12,7 @@ import {
 import api from "../services/api";
 import MediaCard from "../components/media/MediaCard";
 import SideImage from "../components/ui/SideImages";
-import minions from '../assets/success_signup/minions.png'
+import minions from '../assets/success_signup/minions.webp'
 
 export default function ActorDetailPage() {
     const { slug } = useParams();

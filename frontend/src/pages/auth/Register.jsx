@@ -5,17 +5,17 @@ import { useNavigate } from "react-router-dom";
 import SideImages from "../../components/ui/SideImages";
 
 
-import for_login from "../../assets/for-login.png";
+import for_login from "../../assets/for-login.webp";
 // import کردن همه آواتارها
-import avatar1 from "../../assets/avatars/1.png";
-import avatar2 from "../../assets/avatars/2.png";
-import avatar3 from "../../assets/avatars/3.png";
-import avatar4 from "../../assets/avatars/4.png";
-import avatar5 from "../../assets/avatars/5.png";
-import avatar6 from "../../assets/avatars/6.png";
-import avatar7 from "../../assets/avatars/7.png";
-import avatar8 from "../../assets/avatars/8.png";
-import avatar9 from "../../assets/avatars/9.png";
+import avatar1 from "../../assets/avatars/1.webp";
+import avatar2 from "../../assets/avatars/2.webp";
+import avatar3 from "../../assets/avatars/3.webp";
+import avatar4 from "../../assets/avatars/4.webp";
+import avatar5 from "../../assets/avatars/5.webp";
+import avatar6 from "../../assets/avatars/6.webp";
+import avatar7 from "../../assets/avatars/7.webp";
+import avatar8 from "../../assets/avatars/8.webp";
+import avatar9 from "../../assets/avatars/9.webp";
 
 
 function Register() {

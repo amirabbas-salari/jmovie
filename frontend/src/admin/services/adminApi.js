@@ -45,6 +45,7 @@ const crud = (path) => ({
 export const getAdminMe = async () => (await api.get("/admin/me/")).data
 export const getAdminDashboard = async () => (await api.get("/admin/dashboard/")).data
 export const getPermissionCatalog = async () => (await api.get("/admin/permissions/")).data
+export const tmdbLookup = async (params) => (await api.get("/admin/tmdb/lookup/", { params })).data
 
 // ---------------------------------------------------------------------------
 // منابع محتوا

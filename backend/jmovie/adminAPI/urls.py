@@ -18,6 +18,7 @@ from .views import (
     AdminSeasonViewSet,
     AdminSeriesViewSet,
     AdminUserViewSet,
+    TmdbLookupView,
 )
 
 router = DefaultRouter()
@@ -39,4 +40,5 @@ urlpatterns = [
     path("me/", AdminMeView.as_view(), name="admin-me"),
     path("dashboard/", AdminDashboardView.as_view(), name="admin-dashboard"),
     path("permissions/", AdminPermissionCatalogView.as_view(), name="admin-permissions"),
+    path("tmdb/lookup/", TmdbLookupView.as_view(), name="admin-tmdb-lookup"),
 ] + router.urls
