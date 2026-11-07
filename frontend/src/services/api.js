@@ -6,6 +6,12 @@ import {
   clearTokens,
 } from '../utils/token'
 
+if (import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL) {
+  // بدون این متغیر، درخواست‌ها به دامنه‌ی فرانت می‌روند و index.html
+  // برمی‌گردد و همه‌ی بخش‌های وابسته به API (از جمله پنل) خراب می‌شوند.
+  console.error("[api] VITE_API_BASE_URL تنظیم نشده است؛ آدرس بک‌اند را در محیط بیلد (مثلاً Netlify) ست کنید.")
+}
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "",
 })

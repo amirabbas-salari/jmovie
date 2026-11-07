@@ -24,11 +24,15 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 
 # CORS: دامنه‌های مجاز را با CORS_ALLOWED_ORIGINS (کاما جدا) ست کنید.
-# فقط با CORS_ALLOW_ALL_ORIGINS=True همه‌ی دامنه‌ها باز می‌شوند (فقط برای توسعه).
+# پیش‌فرض: لوکال + زیردامنه‌های netlify.app (فرانت این پروژه) تا بدون
+# تنظیم دستی هم کار کند. CORS_ALLOW_ALL_ORIGINS=True فقط برای توسعه.
 CORS_ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
     if o.strip()
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://([a-z0-9-]+\.)*netlify\.app$",
 ]
 CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "False") == "True"
 
@@ -47,9 +51,11 @@ SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-LOCAL-DEV-ONLY-change-me-i
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
 # هاست‌های مجاز با ALLOWED_HOSTS (کاما جدا) از محیط خوانده می‌شوند.
+# هشدار: اگر ست نشود برای جلوگیری از ازکارافتادن دیپلویمنت "*" می‌ماند؛
+# در production حتماً دامنه‌ی واقعی بک‌اند را ست کنید.
 ALLOWED_HOSTS = [
     h.strip()
-    for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver").split(",")
+    for h in os.getenv("ALLOWED_HOSTS", "*").split(",")
     if h.strip()
 ]
 

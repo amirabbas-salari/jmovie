@@ -3,7 +3,17 @@ import api from "../../services/api"
 // ---------------------------------------------------------------------------
 // کمکی‌ها
 // ---------------------------------------------------------------------------
+// وقتی آدرس API اشتباه باشد سرور فرانت (نت‌لیفای) به‌جای JSON فایل
+// index.html را برمی‌گرداند؛ آن را به‌عنوان «لیست خالی» نشان نده.
+export const ensureJson = (data) => {
+  if (typeof data === "string") {
+    throw new Error("پاسخ سرور معتبر نیست — احتمالاً VITE_API_BASE_URL در بیلد فرانت تنظیم نشده است.")
+  }
+  return data
+}
+
 export const normalizeList = (data) => {
+  ensureJson(data)
   if (Array.isArray(data)) return { items: data, total: data.length, pages: 1 }
   if (data && Array.isArray(data.results)) {
     return {
@@ -43,7 +53,7 @@ const crud = (path) => ({
 // هویت و داشبورد (تک‌درخواست به‌جای ۴ لیست کامل)
 // ---------------------------------------------------------------------------
 export const getAdminMe = async () => (await api.get("/admin/me/")).data
-export const getAdminDashboard = async () => (await api.get("/admin/dashboard/")).data
+export const getAdminDashboard = async () => ensureJson((await api.get("/admin/dashboard/")).data)
 export const getPermissionCatalog = async () => (await api.get("/admin/permissions/")).data
 export const tmdbLookup = async (params) => (await api.get("/admin/tmdb/lookup/", { params })).data
 

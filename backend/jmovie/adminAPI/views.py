@@ -144,6 +144,16 @@ class AdminPermissionCatalogView(APIView):
 
 
 class AdminDashboardView(APIView):
+    @staticmethod
+    def _recent_activity():
+        # اگر مایگریشن adminAPI هنوز روی دیتابیس اجرا نشده باشد (جدول لاگ
+        # وجود نداشته باشد) داشبورد نباید کامل از کار بیفتد.
+        try:
+            logs = AdminAuditLog.objects.all()[:8]
+            return AdminAuditLogSerializer(logs, many=True).data
+        except Exception:
+            return []
+
     """
     داشبورد در «یک» درخواست: قبلاً فرانت ۴ لیست کامل را می‌گرفت تا فقط
     count نشان دهد. اینجا همه‌چیز با کوئری‌های aggregate سبک شمرده می‌شود.
@@ -177,7 +187,7 @@ class AdminDashboardView(APIView):
             "latest_movies": AdminMovieListSerializer(latest_movies, many=True, context={"request": request}).data,
             "latest_series": AdminSeriesListSerializer(latest_series, many=True, context={"request": request}).data,
             "pending_comments": AdminCommentSerializer(pending_comments, many=True, context={"request": request}).data,
-            "recent_activity": AdminAuditLogSerializer(AdminAuditLog.objects.all()[:8], many=True).data,
+            "recent_activity": self._recent_activity(),
         }
         return Response(data)
 
