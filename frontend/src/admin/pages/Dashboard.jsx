@@ -1,327 +1,159 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import {
-  Loader2,
-  Film,
-  Clapperboard,
-  Users,
-  Tag,
-  Plus,
-  ArrowUpRight,
-  TrendingUp,
-  Star,
+  Check, Clapperboard, Download, Eye, Film, Layers, MessageSquare,
+  ShieldCheck, Star, Tag, UserCheck, Users, X,
 } from "lucide-react"
-import {
-  getAdminSeries,
-  getAdminMovies,
-  getAdminUsers,
-  getAdminGenres,
-} from "../services/adminApi"
+import { commentsApi, getAdminDashboard } from "../services/adminApi"
+import { useAdmin } from "../context/AdminContext"
+import { Badge, ErrorBox, Spinner, formatNumber } from "../components/ui"
 
-// نرمال‌سازی پاسخ (آرایه یا paginated)
-const normalizeResponse = (response) => {
-  // اگر ورودی آرایه باشد
-  if (Array.isArray(response)) {
-    return { items: response, total: response.length }
-  }
-  
-  // اگر پاسخ دارای ساختار paginated باشد (مانند {count, next, previous, results})
-  if (response && typeof response === 'object') {
-    if (response.results) {
-      return { 
-        items: response.results, 
-        total: response.count !== undefined ? response.count : response.results.length 
-      }
-    }
-    // اگر خود آبجکت شامل آیتم‌ها باشد
-    if (response.items) {
-      return { items: response.items, total: response.total || response.items.length }
-    }
-  }
-  
-  // حالت پیش‌فرض
-  return { items: [], total: 0 }
-}
-
-// کارت آمار
-function StatCard({ icon: Icon, label, value, sub, accent, to }) {
+function StatCard({ icon: StatIcon, label, value, to, accent = "bg-red-600/15 text-red-400" }) {
   const body = (
-    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-5 transition hover:border-white/20 hover:bg-white/[0.04]">
-      <div
-        className={`absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-20 blur-2xl ${accent}`}
-      />
-      <div className="relative flex items-start justify-between">
+    <div className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-red-500/30 hover:bg-white/[0.05]">
+      <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-zinc-500">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-zinc-100">{value}</p>
-          {sub && <p className="mt-1 text-xs text-zinc-500">{sub}</p>}
+          <p className="mt-2 text-3xl font-bold text-zinc-50">{formatNumber(value)}</p>
         </div>
-        <div
-          className={`flex h-11 w-11 items-center justify-center rounded-xl bg-opacity-15 ${accent}`}
-        >
-          <Icon className="h-5 w-5" />
-        </div>
-      </div>
-      {to && (
-        <span className="relative mt-4 inline-flex items-center gap-1 text-xs text-zinc-500 transition group-hover:text-zinc-300">
-          مشاهده
-          <ArrowUpRight className="h-3 w-3" />
+        <span className={`flex h-11 w-11 items-center justify-center rounded-xl ${accent}`}>
+          <StatIcon className="h-5 w-5" />
         </span>
-      )}
+      </div>
     </div>
   )
   return to ? <Link to={to}>{body}</Link> : body
 }
 
-// نمودار میله‌ای مقایسه‌ای
-function CompareBars({ items }) {
-  const max = Math.max(...items.map((i) => i.value), 1)
-  return (
-    <div className="space-y-3">
-      {items.map((i) => (
-        <div key={i.label}>
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-zinc-400">{i.label}</span>
-            <span className="font-semibold text-zinc-200">{i.value}</span>
-          </div>
-          <div className="h-2.5 overflow-hidden rounded-full bg-white/5">
-            <div
-              className={`h-full rounded-full ${i.color}`}
-              style={{ width: `${(i.value / max) * 100}%` }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 export default function Dashboard() {
-  const [series, setSeries] = useState({ items: [], total: 0 })
-  const [movies, setMovies] = useState({ items: [], total: 0 })
-  const [users, setUsers] = useState({ items: [], total: 0 })
-  const [genres, setGenres] = useState({ items: [], total: 0 })
+  const { me, isSuperAdmin } = useAdmin()
+  const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [pending, setPending] = useState([])
 
   useEffect(() => {
-    (async () => {
-      setLoading(true)
-      setError("")
-      try {
-        const [s, m, u, g] = await Promise.all([
-          getAdminSeries(),
-          getAdminMovies(),
-          getAdminUsers(),
-          getAdminGenres(),
-        ])
-        
-        setSeries(normalizeResponse(s))
-        setMovies(normalizeResponse(m))
-        setUsers(normalizeResponse(u))
-        setGenres(normalizeResponse(g))
-      } catch (err) {
-        console.error("Dashboard error:", err)
-        setError("بارگذاری اطلاعات داشبورد با خطا مواجه شد.")
-      } finally {
-        setLoading(false)
-      }
-    })()
+    let alive = true
+    getAdminDashboard()
+      .then((d) => {
+        if (!alive) return
+        setData(d)
+        setPending(d.pending_comments || [])
+      })
+      .catch(() => { if (alive) setError("خطا در دریافت آمار داشبورد") })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
   }, [])
 
-  const stats = useMemo(() => {
-    const all = [...series.items, ...movies.items]
-    const ratings = all
-      .map((x) => Number(x.imdb_rating))
-      .filter((n) => !Number.isNaN(n) && n > 0)
-    const avgRating = ratings.length
-      ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
-      : "—"
-    const ongoing = series.items.filter((s) => !s.is_ended).length
-    const activeUsers = users.items.filter((u) => u.is_active).length
-    return { avgRating, ongoing, activeUsers }
-  }, [series, movies, users])
-
-  const chartItems = useMemo(
-    () => [
-      { label: "فیلم‌ها", value: movies.total, color: "bg-rose-400" },
-      { label: "سریال‌ها", value: series.total, color: "bg-indigo-400" },
-      { label: "کاربران", value: users.total, color: "bg-sky-400" },
-      { label: "ژانرها", value: genres.total, color: "bg-emerald-400" },
-    ],
-    [movies, series, users, genres]
-  )
-
-  const recent = useMemo(() => {
-    const tagged = [
-      ...series.items.map((s) => ({ ...s, _type: "series" })),
-      ...movies.items.map((m) => ({ ...m, _type: "movie" })),
-    ]
-    return tagged.sort((a, b) => (b.id ?? 0) - (a.id ?? 0)).slice(0, 6)
-  }, [series, movies])
-
-  if (loading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="h-7 w-7 animate-spin text-indigo-400" />
-      </div>
-    )
+  const moderate = async (comment, approve) => {
+    try {
+      if (approve) await commentsApi.approve(comment.id)
+      else await commentsApi.reject(comment.id)
+      setPending((p) => p.filter((c) => c.id !== comment.id))
+    } catch { /* بک‌اند خطا را برمی‌گرداند؛ لیست دست‌نخورده می‌ماند */ }
   }
 
+  if (loading) return <Spinner text="در حال بارگذاری داشبورد..." />
+  if (error) return <ErrorBox message={error} />
+  const s = data.stats
+
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-zinc-100">داشبورد</h1>
-        <p className="mt-1 text-sm text-zinc-500">نمای کلی محتوای پنل مدیریت</p>
-      </div>
-
-      {error && (
-        <div className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          {error}
-        </div>
-      )}
-
-      {/* چهار کارت اصلی */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={Film}
-          label="فیلم‌ها"
-          value={movies.total}
-          accent="bg-rose-500 text-rose-300"
-          to="/admin/movies"
-        />
-        <StatCard
-          icon={Clapperboard}
-          label="سریال‌ها"
-          value={series.total}
-          sub={`${stats.ongoing} در حال پخش`}
-          accent="bg-indigo-500 text-indigo-300"
-          to="/admin/series"
-        />
-        <StatCard
-          icon={Users}
-          label="کاربران"
-          value={users.total}
-          sub={`${stats.activeUsers} فعال`}
-          accent="bg-sky-500 text-sky-300"
-          to="/admin/users"
-        />
-        <StatCard
-          icon={Tag}
-          label="ژانرها"
-          value={genres.total}
-          accent="bg-emerald-500 text-emerald-300"
-          to="/admin/genres"
-        />
-      </div>
-
-      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* نمودار مقایسه‌ای */}
-        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 lg:col-span-2">
-          <div className="mb-5 flex items-center gap-2">
-            <TrendingUp className="h-4 w-4 text-indigo-400" />
-            <h2 className="text-sm font-semibold text-zinc-200">
-              توزیع محتوا
-            </h2>
-          </div>
-          <CompareBars items={chartItems} />
-
-          <div className="mt-5 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-            <span className="flex items-center gap-2 text-sm text-zinc-400">
-              <Star className="h-4 w-4 text-amber-300" />
-              میانگین امتیاز کل
-            </span>
-            <span className="text-lg font-bold text-amber-300">
-              {stats.avgRating}
-            </span>
-          </div>
-        </div>
-
-        {/* دسترسی سریع */}
-        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-          <h2 className="mb-4 text-sm font-semibold text-zinc-200">
-            دسترسی سریع
-          </h2>
-          <div className="space-y-3">
-            {[
-              { to: "/admin/movies/new", label: "افزودن فیلم", c: "rose" },
-              { to: "/admin/series/new", label: "افزودن سریال", c: "indigo" },
-              { to: "/admin/genres/new", label: "افزودن ژانر", c: "emerald" },
-            ].map((a) => (
-              <Link
-                key={a.to}
-                to={a.to}
-                className={`flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 transition hover:border-${a.c}-500/40 hover:bg-${a.c}-500/10`}
-              >
-                <span
-                  className={`flex h-9 w-9 items-center justify-center rounded-lg bg-${a.c}-500/15 text-${a.c}-300`}
-                >
-                  <Plus className="h-4 w-4" />
-                </span>
-                <span className="text-sm font-medium text-zinc-200">
-                  {a.label}
-                </span>
-              </Link>
-            ))}
-          </div>
+    <div className="space-y-6">
+      <div className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-l from-[#7F1D1D] via-[#3f0d18] to-zinc-950 p-6">
+        <h1 className="text-xl font-bold text-white sm:text-2xl">
+          سلام {me?.username} 👋
+        </h1>
+        <p className="mt-1.5 text-sm text-zinc-300">
+          {isSuperAdmin
+            ? "شما سوپرادمین هستید و به همه‌ی بخش‌ها دسترسی دارید؛ سطح دسترسی بقیه‌ی ادمین‌ها را از بخش «نقش‌ها و دسترسی‌ها» تعیین کنید."
+            : `نقش شما: ${me?.roles?.map((r) => r.name).join("، ") || "—"} — فقط بخش‌هایی که مجوزشان را دارید برایتان باز است.`}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Badge tone="red"><Eye className="h-3 w-3" /> مجموع بازدید: {formatNumber(s.total_views)}</Badge>
+          <Badge tone="amber"><MessageSquare className="h-3 w-3" /> {formatNumber(s.comments_pending)} نظر در انتظار تأیید</Badge>
+          <Badge><UserCheck className="h-3 w-3" /> {formatNumber(s.vip_users)} کاربر VIP</Badge>
         </div>
       </div>
 
-      {/* آخرین محتوا */}
-      <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-zinc-200">
-            آخرین محتوای افزوده‌شده
-          </h2>
-        </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard icon={Film} label="فیلم‌ها" value={s.movies} to="/admin/movies" />
+        <StatCard icon={Clapperboard} label="سریال‌ها" value={s.series} to="/admin/series" accent="bg-amber-500/15 text-amber-400" />
+        <StatCard icon={Users} label="کاربران" value={s.users} to="/admin/users" accent="bg-sky-500/15 text-sky-400" />
+        <StatCard icon={Download} label="لینک دانلود فعال" value={s.downloads} to="/admin/downloads" accent="bg-emerald-500/15 text-emerald-400" />
+        <StatCard icon={Clapperboard} label="قسمت‌ها" value={s.episodes} accent="bg-violet-500/15 text-violet-400" />
+        <StatCard icon={Tag} label="ژانرها" value={s.genres} to="/admin/genres" accent="bg-pink-500/15 text-pink-400" />
+        <StatCard icon={Layers} label="کالکشن‌ها" value={s.collections} to="/admin/collections" accent="bg-teal-500/15 text-teal-400" />
+        <StatCard icon={ShieldCheck} label="ادمین‌ها و همکاران" value={s.staff_users} to="/admin/users?role=staff" accent="bg-orange-500/15 text-orange-400" />
+      </div>
 
-        {recent.length === 0 ? (
-          <p className="py-8 text-center text-sm text-zinc-500">
-            محتوایی ثبت نشده است.
-          </p>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {recent.map((item) => (
-              <Link
-                key={`${item._type}-${item.id}`}
-                to={`/admin/${item._type === "movie" ? "movies" : "series"}/${item.id}/edit`}
-                className="flex items-center gap-3 py-3 transition hover:bg-white/[0.02]"
-              >
-                <div className="h-12 w-9 flex-shrink-0 overflow-hidden rounded-md bg-white/5">
-                  {item.poster || item.poster_url ? (
-                    <img
-                      src={item.poster || item.poster_url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-zinc-600">
-                      {item._type === "movie" ? (
-                        <Film className="h-4 w-4" />
-                      ) : (
-                        <Clapperboard className="h-4 w-4" />
-                      )}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 xl:col-span-1">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-bold text-zinc-100">نظرات در انتظار تأیید</h2>
+            <Link to="/admin/comments?status=pending" className="text-xs text-red-400 hover:text-red-300">مشاهده همه</Link>
+          </div>
+          {pending.length === 0
+            ? <p className="py-6 text-center text-sm text-zinc-500">🎉 نظری در انتظار نیست.</p>
+            : (
+              <ul className="space-y-3">
+                {pending.map((c) => (
+                  <li key={c.id} className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5">
+                    <p className="text-xs text-zinc-500">{c.username} — روی «{c.target_title}»</p>
+                    <p className="mt-1 line-clamp-2 text-sm leading-6 text-zinc-200">{c.text}</p>
+                    <div className="mt-2.5 flex gap-2">
+                      <button onClick={() => moderate(c, true)} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600/20 px-2.5 py-1.5 text-xs font-medium text-emerald-300 transition hover:bg-emerald-600/30">
+                        <Check className="h-3.5 w-3.5" /> تأیید
+                      </button>
+                      <button onClick={() => moderate(c, false)} className="inline-flex items-center gap-1 rounded-lg bg-red-600/20 px-2.5 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-600/30">
+                        <X className="h-3.5 w-3.5" /> رد
+                      </button>
                     </div>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-zinc-200">
-                    {item.title}
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    {item._type === "movie" ? "فیلم" : "سریال"}
-                  </p>
-                </div>
-                {item.imdb_rating > 0 && (
-                  <span className="inline-flex items-center gap-1 text-xs text-amber-300">
-                    <Star className="h-3 w-3 fill-amber-300" />
-                    {item.imdb_rating}
+                  </li>
+                ))}
+              </ul>
+            )}
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <h2 className="mb-4 font-bold text-zinc-100">آخرین فیلم‌ها</h2>
+          <ul className="space-y-2.5">
+            {data.latest_movies.map((m) => (
+              <li key={m.id}>
+                <Link to={`/admin/movies/${m.id}/edit`} className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-white/5">
+                  {m.poster_display
+                    ? <img src={m.poster_display} alt="" loading="lazy" className="h-12 w-9 rounded-md object-cover" />
+                    : <span className="h-12 w-9 rounded-md bg-white/5" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-zinc-100">{m.title}</span>
+                    <span className="text-[11px] text-zinc-500">{m.year || "—"}</span>
                   </span>
-                )}
-              </Link>
+                  <span className="inline-flex items-center gap-1 text-xs text-amber-300"><Star className="h-3.5 w-3.5 fill-amber-300" />{m.imdb_rating || "—"}</span>
+                </Link>
+              </li>
             ))}
-          </div>
-        )}
+          </ul>
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <h2 className="mb-4 font-bold text-zinc-100">فعالیت‌های اخیر پنل</h2>
+          {data.recent_activity.length === 0
+            ? <p className="py-6 text-center text-sm text-zinc-500">هنوز فعالیتی ثبت نشده است.</p>
+            : (
+              <ul className="space-y-3">
+                {data.recent_activity.map((log) => (
+                  <li key={log.id} className="flex items-start gap-3 text-sm">
+                    <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${log.action === "delete" ? "bg-red-500" : log.action === "create" ? "bg-emerald-500" : "bg-amber-400"}`} />
+                    <span className="min-w-0">
+                      <span className="block truncate text-zinc-200">
+                        {log.username} — {{ create: "ساخت", update: "ویرایش", delete: "حذف" }[log.action]} «{log.object_repr}»
+                      </span>
+                      <span className="text-[11px] text-zinc-500">{new Date(log.created_at).toLocaleString("fa-IR")}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+        </section>
       </div>
     </div>
   )

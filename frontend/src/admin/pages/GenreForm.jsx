@@ -1,191 +1,86 @@
 import { useEffect, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
-import { Loader2, ArrowRight, Save, Tag } from "lucide-react"
-import {
-  createAdminGenre,
-  getAdminGenreById,
-  updateAdminGenre,
-} from "../services/adminApi"
+import { Link, useNavigate, useParams } from "react-router-dom"
+import { ArrowRight, Loader2, Save } from "lucide-react"
+import { genresApi, getApiError, getFieldErrors } from "../services/adminApi"
+import { ErrorBox, Field, PrimaryBtn, Spinner, Toggle, cardCls, inputCls } from "../components/ui"
 
-const initialForm = { name: "", slug: "" }
-
-// تبدیل نام به اسلاگ ساده (lowercase, dash)
-function slugify(str) {
-  return String(str)
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^\w\u0600-\u06FF-]+/g, "")
-    .replace(/-+/g, "-")
-}
+const slugify = (s) => String(s).trim().toLowerCase().replace(/\s+/g, "-").replace(/[^\w-]+/g, "").replace(/-+/g, "-")
 
 export default function GenreForm() {
-  const navigate = useNavigate()
   const { id } = useParams()
   const isEdit = Boolean(id)
-
-  const [form, setForm] = useState(initialForm)
+  const navigate = useNavigate()
+  const [form, setForm] = useState({ name: "", slug: "", description: "", tmdb_id: "", is_active: true })
   const [slugTouched, setSlugTouched] = useState(false)
   const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [fieldErrors, setFieldErrors] = useState({})
 
-  // لود ژانر در حالت ویرایش
   useEffect(() => {
     if (!isEdit) return
     let alive = true
-    ;(async () => {
-      try {
-        const data = await getAdminGenreById(id)
+    genresApi.get(id)
+      .then((d) => {
         if (!alive) return
-        setForm({ name: data.name ?? "", slug: data.slug ?? "" })
+        setForm({ name: d.name || "", slug: d.slug || "", description: d.description || "", tmdb_id: d.tmdb_id ?? "", is_active: d.is_active !== false })
         setSlugTouched(true)
-      } catch {
-        if (alive) setError("بارگذاری ژانر با خطا مواجه شد.")
-      } finally {
-        if (alive) setLoading(false)
-      }
-    })()
-    return () => {
-      alive = false
-    }
+      })
+      .catch(() => { if (alive) setError("بارگذاری ژانر با خطا مواجه شد.") })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
   }, [id, isEdit])
 
-  function onName(value) {
-    setForm((f) => ({
-      ...f,
-      name: value,
-      slug: slugTouched ? f.slug : slugify(value),
-    }))
-  }
-
-  async function onSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    setError("")
-    setFieldErrors({})
-
-    if (!form.name.trim()) {
-      setFieldErrors({ name: "نام ژانر الزامی است." })
-      return
-    }
-
-    setSaving(true)
+    setSaving(true); setError(""); setFieldErrors({})
     try {
       const payload = {
         name: form.name.trim(),
         slug: form.slug.trim() || slugify(form.name),
+        description: form.description,
+        tmdb_id: form.tmdb_id === "" ? null : Number(form.tmdb_id),
+        is_active: form.is_active,
       }
-      if (isEdit) await updateAdminGenre(id, payload)
-      else await createAdminGenre(payload)
+      if (isEdit) await genresApi.update(id, payload); else await genresApi.create(payload)
       navigate("/admin/genres")
     } catch (err) {
-      const resp = err?.response?.data
-      if (resp && typeof resp === "object") setFieldErrors(resp)
-      setError("ذخیره ژانر با خطا مواجه شد.")
-    } finally {
-      setSaving(false)
-    }
+      setFieldErrors(getFieldErrors(err))
+      setError(getApiError(err, "ذخیره‌ی ژانر با خطا مواجه شد."))
+    } finally { setSaving(false) }
   }
 
-  if (loading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
-      </div>
-    )
-  }
+  if (loading) return <Spinner />
 
   return (
-    <div className="mx-auto max-w-xl">
-      {/* header */}
-      <div className="mb-6 flex items-center gap-3">
-        <button
-          onClick={() => navigate("/admin/genres")}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10"
-        >
-          <ArrowRight className="h-4 w-4" />
-        </button>
-        <h1 className="text-xl font-bold text-zinc-100">
-          {isEdit ? "ویرایش ژانر" : "افزودن ژانر"}
-        </h1>
+    <form onSubmit={handleSubmit} className="mx-auto max-w-xl">
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <h1 className="text-xl font-bold text-zinc-50 sm:text-2xl">{isEdit ? "ویرایش ژانر" : "افزودن ژانر"}</h1>
+        <Link to="/admin/genres" className="ms-auto inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/10">
+          <ArrowRight className="h-4 w-4" /> بازگشت
+        </Link>
       </div>
-
-      {error && (
-        <div className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-          {error}
-        </div>
-      )}
-
-      <form
-        onSubmit={onSubmit}
-        className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.02] p-6"
-      >
-        {/* name */}
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-zinc-300">
-            نام ژانر
-          </label>
-          <div className="relative">
-            <Tag className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-            <input
-              value={form.name}
-              onChange={(e) => onName(e.target.value)}
-              placeholder="مثلاً: اکشن"
-              className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pr-10 pl-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500/50"
-            />
-          </div>
-          {fieldErrors.name && (
-            <p className="mt-1 text-xs text-rose-400">{fieldErrors.name}</p>
-          )}
-        </div>
-
-        {/* slug */}
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-zinc-300">
-            اسلاگ (slug)
-          </label>
-          <input
-            value={form.slug}
-            onChange={(e) => {
-              setSlugTouched(true)
-              setForm((f) => ({ ...f, slug: e.target.value }))
-            }}
-            dir="ltr"
-            placeholder="action"
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-left text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-indigo-500/50"
-          />
-          <p className="mt-1 text-xs text-zinc-500">
-            اگر خالی بماند از روی نام ساخته می‌شود.
-          </p>
-          {fieldErrors.slug && (
-            <p className="mt-1 text-xs text-rose-400">{fieldErrors.slug}</p>
-          )}
-        </div>
-
-        {/* actions */}
-        <div className="flex gap-3 pt-2">
-          <button
-            type="button"
-            onClick={() => navigate("/admin/genres")}
-            className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-zinc-300 transition hover:bg-white/10"
-          >
-            انصراف
-          </button>
-          <button
-            type="submit"
-            disabled={saving}
-            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:opacity-50"
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            {isEdit ? "ذخیره تغییرات" : "افزودن ژانر"}
-          </button>
-        </div>
-      </form>
-    </div>
+      <ErrorBox message={error} />
+      <section className={`${cardCls} space-y-4 p-5`}>
+        <Field label="نام ژانر *" error={fieldErrors.name}>
+          <input value={form.name} onChange={(e) => { const v = e.target.value; setForm((f) => ({ ...f, name: v, slug: slugTouched ? f.slug : slugify(v) })) }} className={inputCls} required />
+        </Field>
+        <Field label="اسلاگ" error={fieldErrors.slug}>
+          <input value={form.slug} onChange={(e) => { setSlugTouched(true); setForm((f) => ({ ...f, slug: e.target.value })) }} className={inputCls} dir="ltr" />
+        </Field>
+        <Field label="TMDB ID" error={fieldErrors.tmdb_id}>
+          <input type="number" value={form.tmdb_id} onChange={(e) => setForm((f) => ({ ...f, tmdb_id: e.target.value }))} className={inputCls} dir="ltr" />
+        </Field>
+        <Field label="توضیحات" error={fieldErrors.description}>
+          <textarea rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className={`${inputCls} resize-y`} />
+        </Field>
+        <Toggle label="فعال" desc="در سایت نمایش داده شود" checked={form.is_active} onChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
+      </section>
+      <div className="mt-6 flex justify-end">
+        <PrimaryBtn type="submit" disabled={saving} className="!px-8">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} ذخیره
+        </PrimaryBtn>
+      </div>
+    </form>
   )
 }

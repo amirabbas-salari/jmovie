@@ -1,211 +1,79 @@
-import { data } from "react-router-dom"
 import api from "../../services/api"
 
-const getCount = (data) => {
-  if (!data) return 0
-
-  if (typeof data.count === "number") {
-    return data.count
+// ---------------------------------------------------------------------------
+// کمکی‌ها
+// ---------------------------------------------------------------------------
+export const normalizeList = (data) => {
+  if (Array.isArray(data)) return { items: data, total: data.length, pages: 1 }
+  if (data && Array.isArray(data.results)) {
+    return {
+      items: data.results,
+      total: data.count ?? data.results.length,
+      pages: data.count ? Math.max(1, Math.ceil(data.count / (data.results.length || 24))) : 1,
+    }
   }
-
-  if (Array.isArray(data.results)) {
-    return data.results.length
-  }
-
-  if (Array.isArray(data)) {
-    return data.length
-  }
-
-  return 0
+  return { items: [], total: 0, pages: 1 }
 }
 
-const getItems = (data) => {
-  if (!data) return []
-
-  if (Array.isArray(data.results)) {
-    return data.results
-  }
-
-  if (Array.isArray(data)) {
-    return data
-  }
-
-  return []
+export const getApiError = (err, fallback = "خطایی رخ داد. دوباره تلاش کنید.") => {
+  const data = err?.response?.data
+  if (!data) return fallback
+  if (typeof data === "string") return data
+  if (data.detail) return data.detail
+  const first = Object.values(data).flat?.()[0]
+  return first ? String(first) : fallback
 }
 
-const getErrorMessage = (response) => {
-  if (response.status !== "rejected") return null
-
-  return (
-    response.reason?.response?.data?.detail ||
-    response.reason?.response?.data?.message ||
-    response.reason?.message ||
-    "خطا در دریافت اطلاعات"
-  )
+export const getFieldErrors = (err) => {
+  const data = err?.response?.data
+  if (data && typeof data === "object" && !data.detail) return data
+  return {}
 }
 
-export const getAdminDashboardStats = async () => {
-  const responses = await Promise.allSettled([
-    api.get("/admin/movies/"),
-    api.get("/admin/series/"),
-    api.get("/admin/genres/"),
-    api.get("/admin/users/"),
-  ])
+// CRUD ساز عمومی برای همه‌ی منابع پنل
+const crud = (path) => ({
+  list: async (params = {}) => normalizeList((await api.get(path, { params })).data),
+  get: async (id) => (await api.get(`${path}${id}/`)).data,
+  create: async (payload) => (await api.post(path, payload)).data,
+  update: async (id, payload) => (await api.patch(`${path}${id}/`, payload)).data,
+  remove: async (id) => (await api.delete(`${path}${id}/`)).data,
+})
 
-  const moviesResponse = responses[0]
-  const seriesResponse = responses[1]
-  const genresResponse = responses[2]
-  const usersResponse = responses[3]
+// ---------------------------------------------------------------------------
+// هویت و داشبورد (تک‌درخواست به‌جای ۴ لیست کامل)
+// ---------------------------------------------------------------------------
+export const getAdminMe = async () => (await api.get("/admin/me/")).data
+export const getAdminDashboard = async () => (await api.get("/admin/dashboard/")).data
+export const getPermissionCatalog = async () => (await api.get("/admin/permissions/")).data
 
-  const moviesData =
-    moviesResponse.status === "fulfilled" ? moviesResponse.value.data : null
-
-  const seriesData =
-    seriesResponse.status === "fulfilled" ? seriesResponse.value.data : null
-
-  const genresData =
-    genresResponse.status === "fulfilled" ? genresResponse.value.data : null
-
-  const usersData =
-    usersResponse.status === "fulfilled" ? usersResponse.value.data : null
-
-  return {
-    stats: {
-      moviesCount: getCount(moviesData),
-      seriesCount: getCount(seriesData),
-      genresCount: getCount(genresData),
-      usersCount: getCount(usersData),
-    },
-
-    latestMovies: getItems(moviesData).slice(0, 5),
-    latestSeries: getItems(seriesData).slice(0, 5),
-
-    errors: {
-      movies: moviesResponse.status === "rejected",
-      series: seriesResponse.status === "rejected",
-      genres: genresResponse.status === "rejected",
-      users: usersResponse.status === "rejected",
-    },
-
-    errorMessages: {
-      movies: getErrorMessage(moviesResponse),
-      series: getErrorMessage(seriesResponse),
-      genres: getErrorMessage(genresResponse),
-      users: getErrorMessage(usersResponse),
-    },
-  }
+// ---------------------------------------------------------------------------
+// منابع محتوا
+// ---------------------------------------------------------------------------
+export const moviesApi = crud("/admin/movies/")
+export const seriesApi = crud("/admin/series/")
+export const seasonsApi = crud("/admin/seasons/")
+export const episodesApi = crud("/admin/episodes/")
+export const peopleApi = crud("/admin/people/")
+export const genresApi = crud("/admin/genres/")
+export const collectionsApi = crud("/admin/collections/")
+export const collectionItemsApi = crud("/admin/collection-items/")
+export const downloadsApi = crud("/admin/downloads/")
+export const commentsApi = {
+  ...crud("/admin/comments/"),
+  approve: async (id) => (await api.post(`/admin/comments/${id}/approve/`)).data,
+  reject: async (id) => (await api.post(`/admin/comments/${id}/reject/`)).data,
 }
-
-
-// movies
-export const getAdminMovies = async (params = {}) => {
-  const response = await api.get("/admin/movies/", {
-    params,
-  })
-
-  return response.data
+export const usersApi = {
+  ...crud("/admin/users/"),
+  toggleActive: async (id) => (await api.post(`/admin/users/${id}/toggle_active/`)).data,
+  assignRoles: async (id, roleIds) =>
+    (await api.post(`/admin/users/${id}/assign_roles/`, { role_ids: roleIds })).data,
 }
+export const rolesApi = crud("/admin/roles/")
+export const auditLogsApi = crud("/admin/audit-logs/")
 
-export const getAdminMovieById = async (id) => {
-  const response = await api.get(`/admin/movies/${id}/`)
-  return response.data
-}
-
-export const createAdminMovie = async (data) => {
-  const response = await api.post("/admin/movies/", data)
-  return response.data
-}
-
-export const updateAdminMovie = async (id, data) => {
-  const response = await api.patch(`/admin/movies/${id}/`, data)
-  return response.data
-}
-
-export const deleteAdminMovie = async (id) => {
-  const response = await api.delete(`/admin/movies/${id}/`)
-  return response.data
-}
-
-
-
-// series
-export const getAdminSeries = async (params = {}) => {
-  const response = await api.get("/admin/series/", { params })
-  return response.data
-}
-
-export const getAdminSeriesById = async (id) => {
-  const response = await api.get(`/admin/series/${id}/`)
-  return response.data
-}
-
-export const createAdminSeries = async (data) => {
-  const response = await api.post("/admin/series/", data)
-  return response.data
-}
-
-export const updateAdminSeries = async (id, data) => {
-  const response = await api.patch(`/admin/series/${id}/`, data)
-  return response.data
-}
-
-export const deleteAdminSeries = async (id) => {
-  const response = await api.delete(`/admin/series/${id}/`)
-  return response.data
-}
-
-
-// genres
-export const getAdminGenres = async (params = {}) => {
-  const response = await api.get("/admin/genres/", { params })
-  return response.data
-}
-
-export const getAdminGenreById = async (id) => {
-  const response = await api.get(`/admin/genres/${id}/`)
-  return response.data
-}
-
-export const createAdminGenre = async (payload) => {
-  const response = await api.post("/admin/genres/", payload)
-  return response.data
-}
-
-export const updateAdminGenre = async (id, payload) => {
-  const response = await api.patch(`/admin/genres/${id}/`, payload)
-  return response.data
-}
-
-export const deleteAdminGenre = async (id) => {
-  const response = await api.delete(`/admin/genres/${id}/`)
-  return response.data
-}
-
-
-
-// users
-export const getAdminUsers = async (params = {}) => {
-  const response = await api.get("/admin/users/", { params })
-  return response.data
-}
-
-export const getAdminUserById = async (id) => {
-  const response = await api.get(`/admin/users/${id}/`)
-  return response.data
-}
-
-export const createAdminUser = async (data) => {
-  const response = await api.post("/admin/users/", data)
-  return response.data
-}
-
-export const updateAdminUser = async (id, data) => {
-  const response = await api.patch(`/admin/users/${id}/`, data)
-  return response.data
-}
-
-export const deleteAdminUser = async (id) => {
-  const response = await api.delete(`/admin/users/${id}/`)
-  return response.data
-}
-
+// سازگاری با نام‌های قدیمی (اگر جایی هنوز استفاده شوند)
+export const getAdminMovies = (params) => moviesApi.list(params)
+export const getAdminSeries = (params) => seriesApi.list(params)
+export const getAdminGenres = (params) => genresApi.list(params)
+export const getAdminUsers = (params) => usersApi.list(params)

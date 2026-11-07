@@ -33,7 +33,7 @@ AUTH_USER_MODEL = "accounts.User"
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-qcb*(ym905qto=h!t^ka3gjzxtzots4cylzx3^l2r12h_d=ld#'
+SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-LOCAL-DEV-ONLY-change-me-in-production")  # در production حتماً از env ست شود؛ کلید قبلی داخل گیت لو رفته است
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = True
@@ -226,13 +226,25 @@ import dj_database_url
     #     }
     # }
 
-# for railway volume
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': '/data/db.sqlite3',
+# دیتابیس: اگر DATABASE_URL ست شده باشد از همان استفاده می‌شود (Postgres و…)،
+# در غیر این صورت sqlite روی volume ریل‌وی (/data) و اگر آن مسیر نبود کنار پروژه.
+import dj_database_url as _dj_database_url
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    DATABASES = {
+        "default": _dj_database_url.parse(DATABASE_URL, conn_max_age=600),
     }
-}
+else:
+    _sqlite_path = os.getenv("SQLITE_PATH") or (
+        "/data/db.sqlite3" if os.path.isdir("/data") else str(BASE_DIR / "db.sqlite3")
+    )
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': _sqlite_path,
+        }
+    }
 
 
 # # sqlite for local
@@ -301,4 +313,4 @@ NVIDIA_MODEL = os.getenv('NVIDIA_MODEL')
 
 # TMDB
 
-TMDB_API_KEY = "753a485a017e42c48fb9c930e4456d9a"   
+TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")  # کلید قبلی داخل گیت لو رفته؛ از env ست و rotate شود   

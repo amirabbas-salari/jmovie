@@ -7,7 +7,7 @@ import {
 } from '../utils/token'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL,
+  baseURL: import.meta.env.VITE_API_BASE_URL || "",
 })
 
 api.interceptors.request.use(config => {
@@ -50,7 +50,7 @@ api.interceptors.response.use(
       return new Promise((resolve, reject) => {
         axios
           .post(
-            `${import.meta.env.VITE_API_BASE_URL}/api/token/refresh/`,
+            `${import.meta.env.VITE_API_BASE_URL || ""}/api/token/refresh/`,
             { refresh: getRefreshToken() }
           )
           .then(({ data }) => {

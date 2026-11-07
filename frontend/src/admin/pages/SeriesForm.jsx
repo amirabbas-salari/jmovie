@@ -1,403 +1,424 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
-import {
-  Tv, Image as ImageIcon, Star, Calendar, Hash, Type, FileText,
-  Tag, Upload, X, Save, Loader2, Link2, Eye, CheckCircle2, ArrowRight,
-} from "lucide-react"
-import {
-  createAdminSeries,
-  getAdminSeriesById,
-  updateAdminSeries,
-  getAdminGenres,
-} from "../services/adminApi"
+import { ArrowRight, Loader2, Pencil, Plus, Save, Trash2 } from "lucide-react"
+import { episodesApi, genresApi, seasonsApi, seriesApi, getApiError, getFieldErrors } from "../services/adminApi"
+import { CastEditor, DownloadsManager, GalleryEditor } from "../components/editors"
+import { Badge, ConfirmModal, ErrorBox, Field, GhostBtn, PrimaryBtn, Spinner, Toggle, cardCls, inputCls } from "../components/ui"
 
-// اگر ژانرها ذخیره نشد، این را به "genre_ids" تغییر بده
-const GENRE_FIELD = "genre_ids"
-
-const initialForm = {
-  imdb_id: "",
-  title: "",
-  original_title: "",
-  slug: "",
-  description: "",
-  views: "",
-  start_date: "",
-  end_date: "",
-  imdb_rating: "",
-  poster: null,
-  backdrop: null,
-  poster_url: "",
-  backdrop_url: "",
-  trailer_url: "",
-  is_ended: false,
-  genres: [],
+const emptyForm = {
+  title: "", original_title: "", slug: "", imdb_id: "", tmdb_id: "", description: "",
+  start_date: "", end_date: "", imdb_rating: "", imdb_votes: "", views: 0,
+  poster_url: "", backdrop_url: "", is_ended: false, number_of_seasons: "", number_of_episodes: "",
+  genre_ids: [],
 }
 
-/* ---------- UI helpers ---------- */
-const inputCls =
-  "w-full rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm " +
-  "text-zinc-100 placeholder-zinc-500 outline-none transition " +
-  "focus:border-indigo-400/50 focus:bg-white/10 focus:ring-2 focus:ring-indigo-500/20"
+const TABS = [
+  { id: "main", label: "اطلاعات اصلی" },
+  { id: "cast", label: "عوامل و بازیگران" },
+  { id: "episodes", label: "فصل‌ها و قسمت‌ها" },
+  { id: "gallery", label: "گالری" },
+  { id: "downloads", label: "لینک‌های دانلود" },
+]
 
-function SectionTitle({ icon: Icon, children }) {
-  return (
-    <div className="mb-4 flex items-center gap-2 text-zinc-200">
-      <Icon className="h-4 w-4 text-indigo-400" />
-      <h3 className="text-sm font-semibold uppercase tracking-wide">{children}</h3>
-    </div>
-  )
-}
-
-function Field({ label, icon: Icon, required, children, hint, error }) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-zinc-400">
-        {Icon && <Icon className="h-3.5 w-3.5" />}
-        {label}
-        {required && <span className="text-rose-400">*</span>}
-      </span>
-      {children}
-      {hint && <span className="mt-1 block text-[11px] text-zinc-500">{hint}</span>}
-      <FieldError error={error} />
-    </label>
-  )
-}
-
-function FieldError({ error }) {
-  if (!error) return null
-  const items = Array.isArray(error) ? error : [error]
-  return (
-    <span className="mt-1 block space-y-0.5">
-      {items.map((it, i) => (
-        <span key={i} className="block text-[11px] text-rose-400">
-          {String(it)}
-        </span>
-      ))}
-    </span>
-  )
-}
-
-function Toggle({ label, desc, checked, onChange, icon: Icon }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-right transition hover:bg-white/10"
-    >
-      <span className="flex items-center gap-3">
-        {Icon && <Icon className="h-4 w-4 text-indigo-400" />}
-        <span>
-          <span className="block text-sm font-medium text-zinc-100">{label}</span>
-          {desc && <span className="block text-[11px] text-zinc-500">{desc}</span>}
-        </span>
-      </span>
-      <span className={`relative h-6 w-11 shrink-0 rounded-full transition ${checked ? "bg-indigo-500" : "bg-zinc-700"}`}>
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${checked ? "left-[22px]" : "left-0.5"}`} />
-      </span>
-    </button>
-  )
-}
-
-function ImageUpload({ label, fileName, urlName, fileValue, urlValue, onPickFile, onChangeUrl, onClear, aspect = "aspect-[2/3]" }) {
-  const ref = useRef(null)
-  const preview = fileValue instanceof File ? URL.createObjectURL(fileValue) : urlValue || ""
-  return (
-    <div className="space-y-3">
-      <span className="block text-xs font-medium text-zinc-400">{label}</span>
-      <div className={`group relative ${aspect} w-full overflow-hidden rounded-2xl border border-white/10 bg-white/5`}>
-        {preview ? (
-          <>
-            <img src={preview} alt={label} className="h-full w-full object-cover" />
-            <button
-              type="button"
-              onClick={onClear}
-              className="absolute right-2 top-2 rounded-lg bg-black/60 p-1.5 text-white opacity-0 transition group-hover:opacity-100 hover:bg-rose-500"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            onClick={() => ref.current?.click()}
-            className="flex h-full w-full flex-col items-center justify-center gap-2 text-zinc-500 transition hover:text-indigo-400"
-          >
-            <Upload className="h-6 w-6" />
-            <span className="text-xs">انتخاب تصویر</span>
-          </button>
-        )}
-      </div>
-      <input ref={ref} type="file" name={fileName} accept="image/*" className="hidden"
-        onChange={(e) => e.target.files?.[0] && onPickFile(e.target.files[0])} />
-      <div className="relative">
-        <Link2 className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
-        <input type="url" name={urlName} value={urlValue} onChange={onChangeUrl}
-          placeholder="یا لینک تصویر..." className={inputCls + " pr-9"} />
-      </div>
-    </div>
-  )
-}
-
-/* ---------- Main ---------- */
 export default function SeriesForm() {
-  const navigate = useNavigate()
   const { id } = useParams()
-  const isEditMode = Boolean(id)
-
+  const isEdit = Boolean(id)
+  const navigate = useNavigate()
+  const [tab, setTab] = useState("main")
+  const [form, setForm] = useState(emptyForm)
+  const [posterFile, setPosterFile] = useState(null)
+  const [backdropFile, setBackdropFile] = useState(null)
+  const [cast, setCast] = useState([])
+  const [gallery, setGallery] = useState([])
   const [genres, setGenres] = useState([])
-  const [form, setForm] = useState(initialForm)
-  const [loading, setLoading] = useState(isEditMode)
+  const [loading, setLoading] = useState(isEdit)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
   const [fieldErrors, setFieldErrors] = useState({})
 
-  const pageTitle = useMemo(() => (isEditMode ? "ویرایش سریال" : "افزودن سریال جدید"), [isEditMode])
-
-  useEffect(() => { loadGenres() }, [])
+  useEffect(() => {
+    genresApi.list({ page_size: 100 }).then((d) => setGenres(d.items)).catch(() => {})
+  }, [])
 
   useEffect(() => {
-    if (!isEditMode) return
-    const loadSeries = async () => {
-      try {
-        setLoading(true); setError("")
-        const data = await getAdminSeriesById(id)
+    if (!isEdit) return
+    let alive = true
+    seriesApi.get(id)
+      .then((data) => {
+        if (!alive) return
         setForm({
-          imdb_id: data.imdb_id || "",
-          title: data.title || "",
-          original_title: data.original_title || "",
-          slug: data.slug || "",
-          description: data.description || "",
-          views: data.views ?? "",
-          start_date: data.start_date || "",
-          end_date: data.end_date || "",
-          imdb_rating: data.imdb_rating ?? "",
-          poster: null,
-          backdrop: null,
-          poster_url: data.poster_url || data.poster || "",
-          backdrop_url: data.backdrop_url || data.backdrop || "",
-          trailer_url: data.trailer_url || "",
-          is_ended: data.is_ended === true,
-          genres: Array.isArray(data.genres) ? data.genres.map((g) => Number(g?.id ?? g)) : [],
+          title: data.title || "", original_title: data.original_title || "",
+          slug: data.slug || "", imdb_id: data.imdb_id || "", tmdb_id: data.tmdb_id ?? "",
+          description: data.description || "", start_date: data.start_date || "",
+          end_date: data.end_date || "", imdb_rating: data.imdb_rating ?? "",
+          imdb_votes: data.imdb_votes ?? "", views: data.views ?? 0,
+          poster_url: data.poster_url || "", backdrop_url: data.backdrop_url || "",
+          is_ended: Boolean(data.is_ended),
+          number_of_seasons: data.number_of_seasons ?? "", number_of_episodes: data.number_of_episodes ?? "",
+          genre_ids: (data.genres || []).map((g) => g.id),
         })
-      } catch (err) {
-        console.error("Load series error:", err)
-        setError("خطا در دریافت اطلاعات سریال")
-      } finally { setLoading(false) }
-    }
-    loadSeries()
-  }, [id, isEditMode])
-
-  const loadGenres = async () => {
-    try {
-      const data = await getAdminGenres()
-      setGenres(Array.isArray(data) ? data : data.results || [])
-    } catch (err) { console.error("Load genres error:", err) }
-  }
+        setCast((data.cast || []).map((c) => ({ person: c.person, role: c.role, character_name: c.character_name || "" })))
+        setGallery((data.gallery || []).map((g) => ({ image_url: g.image_url || "", caption: g.caption || "", order: g.order || 0 })))
+      })
+      .catch(() => { if (alive) setError("بارگذاری سریال با خطا مواجه شد.") })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [id, isEdit])
 
   const set = (name) => (e) => {
-    const v = e?.target ? e.target.value : e
-    setForm((f) => ({ ...f, [name]: v }))
+    setForm((f) => ({ ...f, [name]: e.target.value }))
     setFieldErrors((p) => ({ ...p, [name]: undefined }))
   }
-
-  const toggleGenre = (gid) => {
-    const n = Number(gid)
-    setForm((f) => ({
-      ...f,
-      genres: f.genres.includes(n) ? f.genres.filter((x) => x !== n) : [...f.genres, n],
-    }))
-    setFieldErrors((p) => ({ ...p, [GENRE_FIELD]: undefined, genres: undefined }))
-  }
-
-  const buildPayload = () => {
-    const fd = new FormData()
-    const appendIf = (k, v) => {
-      if (v !== "" && v !== null && v !== undefined) fd.append(k, v)
-    }
-    fd.append("imdb_id", form.imdb_id || "")
-    fd.append("title", form.title || "")
-    appendIf("original_title", form.original_title)
-    appendIf("slug", form.slug)
-    appendIf("description", form.description)
-    appendIf("views", form.views ? String(Number(form.views)) : "")
-    appendIf("start_date", form.start_date)
-    appendIf("end_date", form.end_date)
-    appendIf("imdb_rating", form.imdb_rating ? String(Number(form.imdb_rating)) : "")
-    appendIf("trailer_url", form.trailer_url)
-    fd.append("is_ended", String(form.is_ended))
-
-    form.genres
-      .filter((g) => Number.isFinite(Number(g)))
-      .forEach((g) => fd.append(GENRE_FIELD, String(Number(g))))
-
-    if (form.poster instanceof File) fd.append("poster", form.poster)
-    if (form.backdrop instanceof File) fd.append("backdrop", form.backdrop)
-    if (form.poster_url) fd.append("poster_url", form.poster_url)
-    if (form.backdrop_url) fd.append("backdrop_url", form.backdrop_url)
-    return fd
-  }
+  const toggleGenre = (gid) =>
+    setForm((f) => ({ ...f, genre_ids: f.genre_ids.includes(gid) ? f.genre_ids.filter((g) => g !== gid) : [...f.genre_ids, gid] }))
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setSaving(true); setError(""); setFieldErrors({})
     try {
-      setSaving(true); setError(""); setFieldErrors({})
-      const payload = buildPayload()
-      if (isEditMode) await updateAdminSeries(id, payload)
-      else await createAdminSeries(payload)
+      let savedId = id
+      const hasFiles = posterFile || backdropFile
+      if (hasFiles) {
+        const fd = new FormData()
+        Object.entries(form).forEach(([k, v]) => {
+          if (k === "genre_ids") v.forEach((g) => fd.append("genre_ids", g))
+          else if (v !== "" && v !== null && v !== undefined) fd.append(k, v)
+        })
+        if (posterFile) fd.append("poster", posterFile)
+        if (backdropFile) fd.append("backdrop", backdropFile)
+        savedId = isEdit ? (await seriesApi.update(id, fd)).id : (await seriesApi.create(fd)).id
+      } else {
+        const payload = {
+          ...form,
+          tmdb_id: form.tmdb_id === "" ? null : Number(form.tmdb_id),
+          imdb_votes: form.imdb_votes === "" ? null : Number(form.imdb_votes),
+          number_of_seasons: form.number_of_seasons === "" ? null : Number(form.number_of_seasons),
+          number_of_episodes: form.number_of_episodes === "" ? null : Number(form.number_of_episodes),
+          end_date: form.end_date || null,
+        }
+        savedId = isEdit ? (await seriesApi.update(id, payload)).id : (await seriesApi.create(payload)).id
+      }
+      const castItems = cast.filter((c) => c.person?.id).map((c) => ({
+        person: c.person.id, role: c.role, character_name: c.character_name || "",
+      }))
+      await seriesApi.update(savedId, { cast_items: castItems, gallery_items: gallery })
       navigate("/admin/series")
     } catch (err) {
-      console.error("Save series error:", err)
-      const data = err?.response?.data
-      if (data && typeof data === "object") {
-        setFieldErrors(data)
-        setError("لطفاً خطاهای فرم را بررسی کن.")
-      } else setError("خطا در ذخیره سریال")
-    } finally { setSaving(false) }
+      setFieldErrors(getFieldErrors(err))
+      setError(getApiError(err, "ذخیره‌ی سریال با خطا مواجه شد."))
+    } finally {
+      setSaving(false)
+    }
   }
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-300">
-        <Loader2 className="ml-2 h-5 w-5 animate-spin text-indigo-400" />
-        در حال دریافت اطلاعات سریال...
-      </div>
-    )
-  }
+  if (loading) return <Spinner text="در حال دریافت اطلاعات سریال..." />
+  const posterPreview = posterFile ? URL.createObjectURL(posterFile) : form.poster_url
+  const backdropPreview = backdropFile ? URL.createObjectURL(backdropFile) : form.backdrop_url
 
   return (
-    <form onSubmit={handleSubmit} dir="rtl" className="min-h-screen bg-zinc-950 px-4 py-8 text-zinc-100">
-      <div className="mx-auto max-w-5xl">
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-indigo-500/15 p-3 ring-1 ring-indigo-500/30">
-              <Tv className="h-6 w-6 text-indigo-400" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold">{pageTitle}</h1>
-              <p className="text-sm text-zinc-500">اطلاعات سریال را وارد و ذخیره کن.</p>
-            </div>
-          </div>
-          <Link to="/admin/series"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:bg-white/5">
-            <ArrowRight className="h-4 w-4" /> بازگشت به لیست
-          </Link>
+    <form onSubmit={handleSubmit}>
+      <div className="mb-6 flex flex-wrap items-center gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-50 sm:text-2xl">{isEdit ? "ویرایش سریال" : "افزودن سریال جدید"}</h1>
+          <p className="mt-1 text-sm text-zinc-500">همه‌ی اطلاعات سریال از همین‌جا قابل تغییر است.</p>
         </div>
+        <Link to="/admin/series" className="ms-auto inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-zinc-300 transition hover:bg-white/10">
+          <ArrowRight className="h-4 w-4" /> بازگشت به لیست
+        </Link>
+      </div>
 
-        {error && (
-          <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-300">
-            {error}
-          </div>
-        )}
+      <ErrorBox message={error} />
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* Main */}
-          <div className="space-y-6 lg:col-span-2">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur">
-              <SectionTitle icon={Type}>اطلاعات پایه</SectionTitle>
+      <div className="mb-5 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1">
+        {TABS.map((t) => (
+          <button key={t.id} type="button" onClick={() => setTab(t.id)}
+            className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition ${tab === t.id ? "bg-red-600 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-zinc-100"}`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "main" && (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="space-y-5 lg:col-span-2">
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">اطلاعات پایه</h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="عنوان" icon={Type} required error={fieldErrors.title}>
-                  <input className={inputCls} value={form.title} onChange={set("title")} placeholder="نام سریال" />
-                </Field>
-                <Field label="عنوان اصلی" icon={Type} error={fieldErrors.original_title}>
-                  <input className={inputCls} value={form.original_title} onChange={set("original_title")} placeholder="Original title" />
-                </Field>
-                <Field label="IMDb ID" icon={Hash} required error={fieldErrors.imdb_id}>
-                  <input className={inputCls} value={form.imdb_id} onChange={set("imdb_id")} placeholder="tt1234567" />
-                </Field>
-                <Field label="Slug" icon={Link2} error={fieldErrors.slug}>
-                  <input className={inputCls} value={form.slug} onChange={set("slug")} placeholder="series-slug" />
-                </Field>
-              </div>
-              <div className="mt-4">
-                <Field label="خلاصه داستان" icon={FileText} error={fieldErrors.description}>
-                  <textarea rows={4} className={inputCls + " resize-y"} value={form.description}
-                    onChange={set("description")} placeholder="خلاصه‌ی داستان..." />
-                </Field>
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur">
-              <SectionTitle icon={Star}>تاریخ، امتیاز و رسانه</SectionTitle>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="تاریخ شروع" icon={Calendar} error={fieldErrors.start_date}>
-                  <input type="date" className={inputCls} value={form.start_date} onChange={set("start_date")} />
-                </Field>
-                <Field label="تاریخ پایان" icon={Calendar} hint="در صورت ادامه‌دار بودن خالی بگذار" error={fieldErrors.end_date}>
-                  <input type="date" className={inputCls} value={form.end_date} onChange={set("end_date")} />
-                </Field>
-                <Field label="امتیاز IMDb" icon={Star} error={fieldErrors.imdb_rating}>
-                  <input type="number" step="0.1" min="0" max="10" className={inputCls}
-                    value={form.imdb_rating} onChange={set("imdb_rating")} placeholder="8.5" />
-                </Field>
-                <Field label="بازدید" icon={Eye} error={fieldErrors.views}>
-                  <input type="number" min="0" className={inputCls} value={form.views}
-                    onChange={set("views")} placeholder="0" />
-                </Field>
+                <Field label="عنوان *" error={fieldErrors.title}><input value={form.title} onChange={set("title")} className={inputCls} required /></Field>
+                <Field label="عنوان اصلی" error={fieldErrors.original_title}><input value={form.original_title} onChange={set("original_title")} className={inputCls} dir="ltr" /></Field>
+                <Field label="IMDb ID *" error={fieldErrors.imdb_id}><input value={form.imdb_id} onChange={set("imdb_id")} className={inputCls} dir="ltr" required /></Field>
+                <Field label="TMDB ID" error={fieldErrors.tmdb_id}><input type="number" value={form.tmdb_id} onChange={set("tmdb_id")} className={inputCls} dir="ltr" /></Field>
+                <Field label="اسلاگ" error={fieldErrors.slug} hint="خالی بماند خودکار ساخته می‌شود"><input value={form.slug} onChange={set("slug")} className={inputCls} dir="ltr" /></Field>
+                <Field label="بازدید" error={fieldErrors.views}><input type="number" min="0" value={form.views} onChange={set("views")} className={inputCls} /></Field>
                 <div className="sm:col-span-2">
-                  <Field label="لینک تریلر" icon={Link2} error={fieldErrors.trailer_url}>
-                    <input type="url" className={inputCls} value={form.trailer_url}
-                      onChange={set("trailer_url")} placeholder="https://youtube.com/..." />
+                  <Field label="خلاصه داستان" error={fieldErrors.description}>
+                    <textarea rows={5} value={form.description} onChange={set("description")} className={`${inputCls} resize-y`} />
                   </Field>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur">
-              <SectionTitle icon={Tag}>ژانرها</SectionTitle>
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">تاریخ، امتیاز و قسمت‌ها</h2>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <Field label="تاریخ شروع" error={fieldErrors.start_date}><input type="date" value={form.start_date} onChange={set("start_date")} className={inputCls} /></Field>
+                <Field label="تاریخ پایان" error={fieldErrors.end_date} hint="خالی = در حال پخش"><input type="date" value={form.end_date} onChange={set("end_date")} className={inputCls} /></Field>
+                <Field label="امتیاز IMDb" error={fieldErrors.imdb_rating}><input type="number" step="0.1" min="0" max="10" value={form.imdb_rating} onChange={set("imdb_rating")} className={inputCls} /></Field>
+                <Field label="تعداد رأی" error={fieldErrors.imdb_votes}><input type="number" min="0" value={form.imdb_votes} onChange={set("imdb_votes")} className={inputCls} /></Field>
+                <Field label="تعداد فصل" error={fieldErrors.number_of_seasons}><input type="number" min="0" value={form.number_of_seasons} onChange={set("number_of_seasons")} className={inputCls} /></Field>
+                <Field label="تعداد قسمت" error={fieldErrors.number_of_episodes}><input type="number" min="0" value={form.number_of_episodes} onChange={set("number_of_episodes")} className={inputCls} /></Field>
+              </div>
+            </section>
+
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">ژانرها</h2>
               <div className="flex flex-wrap gap-2">
                 {genres.map((g) => {
-                  const active = form.genres.includes(Number(g.id))
+                  const active = form.genre_ids.includes(g.id)
                   return (
                     <button key={g.id} type="button" onClick={() => toggleGenre(g.id)}
-                      className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${
-                        active
-                          ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/30"
-                          : "border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
-                      }`}>
-                      {g.name || g.title}
+                      className={`rounded-full px-3.5 py-1.5 text-xs font-medium transition ${active ? "bg-red-600 text-white" : "border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"}`}>
+                      {g.name}
                     </button>
                   )
                 })}
-                {genres.length === 0 && <span className="text-xs text-zinc-500">ژانری موجود نیست</span>}
+                {genres.length === 0 && <span className="text-xs text-zinc-500">ژانری ثبت نشده است.</span>}
               </div>
-              <FieldError error={fieldErrors[GENRE_FIELD] || fieldErrors.genres} />
-            </div>
+            </section>
           </div>
 
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur">
-              <SectionTitle icon={ImageIcon}>تصاویر</SectionTitle>
-              <div className="space-y-6">
-                <ImageUpload label="پوستر (2:3)" fileName="poster" urlName="poster_url"
-                  fileValue={form.poster} urlValue={form.poster_url}
-                  onPickFile={(file) => setForm((f) => ({ ...f, poster: file }))}
-                  onChangeUrl={set("poster_url")}
-                  onClear={() => setForm((f) => ({ ...f, poster: null, poster_url: "" }))} />
-                <ImageUpload label="بک‌گراند (16:9)" aspect="aspect-video" fileName="backdrop" urlName="backdrop_url"
-                  fileValue={form.backdrop} urlValue={form.backdrop_url}
-                  onPickFile={(file) => setForm((f) => ({ ...f, backdrop: file }))}
-                  onChangeUrl={set("backdrop_url")}
-                  onClear={() => setForm((f) => ({ ...f, backdrop: null, backdrop_url: "" }))} />
+          <div className="space-y-5">
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">تصاویر</h2>
+              <div className="space-y-5">
+                <div>
+                  <p className="mb-2 text-xs text-zinc-400">پوستر</p>
+                  {posterPreview && <img src={posterPreview} alt="پوستر" className="mb-2 aspect-[2/3] w-32 rounded-xl object-cover" />}
+                  <input type="file" accept="image/*" onChange={(e) => setPosterFile(e.target.files?.[0] || null)} className="mb-2 block w-full text-xs text-zinc-400 file:ml-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-zinc-200" />
+                  <input value={form.poster_url} onChange={set("poster_url")} placeholder="یا لینک پوستر" dir="ltr" className={inputCls} />
+                </div>
+                <div>
+                  <p className="mb-2 text-xs text-zinc-400">بک‌گراند</p>
+                  {backdropPreview && <img src={backdropPreview} alt="بک‌گراند" className="mb-2 aspect-video w-full rounded-xl object-cover" />}
+                  <input type="file" accept="image/*" onChange={(e) => setBackdropFile(e.target.files?.[0] || null)} className="mb-2 block w-full text-xs text-zinc-400 file:ml-3 file:rounded-lg file:border-0 file:bg-white/10 file:px-3 file:py-1.5 file:text-zinc-200" />
+                  <input value={form.backdrop_url} onChange={set("backdrop_url")} placeholder="یا لینک بک‌گراند" dir="ltr" className={inputCls} />
+                </div>
               </div>
-              <FieldError error={fieldErrors.poster || fieldErrors.backdrop} />
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur">
-              <SectionTitle icon={CheckCircle2}>وضعیت</SectionTitle>
-              <Toggle label="سریال به اتمام رسیده" desc="پخش این سریال تمام شده است" icon={CheckCircle2}
-                checked={form.is_ended} onChange={(v) => setForm((f) => ({ ...f, is_ended: v }))} />
-            </div>
-
-            <button type="submit" disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:opacity-50">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {saving ? "در حال ذخیره..." : isEditMode ? "بروزرسانی سریال" : "ذخیره سریال"}
-            </button>
+            </section>
+            <section className={`${cardCls} p-5`}>
+              <h2 className="mb-4 font-bold text-zinc-100">وضعیت</h2>
+              <Toggle label="به پایان رسیده" desc="پخش سریال تمام شده است" checked={form.is_ended} onChange={(v) => setForm((f) => ({ ...f, is_ended: v }))} />
+            </section>
           </div>
         </div>
+      )}
+
+      {tab === "cast" && (
+        <section className={`${cardCls} p-5`}>
+          <h2 className="mb-1 font-bold text-zinc-100">عوامل و بازیگران</h2>
+          <p className="mb-4 text-xs text-zinc-500">با ذخیره‌ی فرم، این لیست جایگزین عوامل فعلی می‌شود.</p>
+          <CastEditor items={cast} onChange={setCast} />
+        </section>
+      )}
+
+      {tab === "episodes" && (
+        <section className={`${cardCls} p-5`}>
+          <h2 className="mb-4 font-bold text-zinc-100">فصل‌ها و قسمت‌ها</h2>
+          <SeasonsManager seriesId={id} />
+        </section>
+      )}
+
+      {tab === "gallery" && (
+        <section className={`${cardCls} p-5`}>
+          <h2 className="mb-1 font-bold text-zinc-100">گالری تصاویر</h2>
+          <p className="mb-4 text-xs text-zinc-500">با ذخیره‌ی فرم، این لیست جایگزین گالری فعلی می‌شود.</p>
+          <GalleryEditor items={gallery} onChange={setGallery} />
+        </section>
+      )}
+
+      {tab === "downloads" && (
+        <section className={`${cardCls} p-5`}>
+          <h2 className="mb-4 font-bold text-zinc-100">لینک‌های دانلود سریال</h2>
+          <DownloadsManager targetType="series" objectId={id} />
+        </section>
+      )}
+
+      <div className="sticky bottom-4 mt-6 flex justify-end">
+        <PrimaryBtn type="submit" disabled={saving} className="!px-8 !py-3 shadow-2xl">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {isEdit ? "ذخیره‌ی تغییرات" : "ساخت سریال"}
+        </PrimaryBtn>
       </div>
     </form>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// مدیریت فصل‌ها و قسمت‌های یک سریال
+// ---------------------------------------------------------------------------
+function SeasonsManager({ seriesId }) {
+  const [seasons, setSeasons] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [activeSeason, setActiveSeason] = useState(null)
+  const [newSeason, setNewSeason] = useState("")
+  const [toDelete, setToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const load = () => {
+    if (!seriesId) return
+    setLoading(true)
+    seasonsApi.list({ series: seriesId, page_size: 100, ordering: "season_number" })
+      .then((d) => setSeasons(d.items))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+  useEffect(load, [seriesId])
+
+  if (!seriesId) return <p className="text-sm text-zinc-500">برای مدیریت فصل‌ها و قسمت‌ها، اول اطلاعات اصلی سریال را ذخیره کنید.</p>
+  if (loading) return <p className="flex items-center gap-2 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> در حال بارگذاری فصل‌ها...</p>
+
+  const addSeason = async () => {
+    if (!newSeason) return
+    const created = await seasonsApi.create({ series: Number(seriesId), season_number: Number(newSeason) })
+    setSeasons((p) => [...p, created].sort((a, b) => a.season_number - b.season_number))
+    setNewSeason("")
+    setActiveSeason(created.id)
+  }
+
+  const confirmDelete = async () => {
+    setDeleting(true)
+    try {
+      await seasonsApi.remove(toDelete.id)
+      setSeasons((p) => p.filter((s) => s.id !== toDelete.id))
+      if (activeSeason === toDelete.id) setActiveSeason(null)
+      setToDelete(null)
+    } finally { setDeleting(false) }
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {seasons.map((s) => (
+          <span key={s.id} className={`inline-flex items-center gap-1 rounded-full border py-1 pl-1.5 pr-3 text-xs font-medium ${activeSeason === s.id ? "border-red-500/40 bg-red-600/20 text-red-200" : "border-white/10 bg-white/5 text-zinc-300"}`}>
+            <button type="button" onClick={() => setActiveSeason(activeSeason === s.id ? null : s.id)}>
+              فصل {s.season_number} <span className="text-zinc-500">({s.episodes_count ?? 0} قسمت)</span>
+            </button>
+            <button type="button" onClick={() => setToDelete(s)} className="flex h-5 w-5 items-center justify-center rounded-full text-zinc-500 hover:bg-red-500/20 hover:text-red-300" aria-label="حذف فصل">
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1.5">
+          <input type="number" min="1" value={newSeason} onChange={(e) => setNewSeason(e.target.value)} placeholder="شماره فصل" className="w-24 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs outline-none focus:border-red-500/40" />
+          <button type="button" onClick={addSeason} className="inline-flex items-center gap-1 rounded-full bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500">
+            <Plus className="h-3.5 w-3.5" /> فصل جدید
+          </button>
+        </span>
+      </div>
+
+      {activeSeason
+        ? <EpisodesManager seasonId={activeSeason} />
+        : <p className="text-sm text-zinc-500">برای دیدن و ویرایش قسمت‌ها، یک فصل را انتخاب کنید.</p>}
+
+      {toDelete && (
+        <ConfirmModal title="حذف فصل" message={`فصل ${toDelete.season_number} و همه‌ی قسمت‌هایش حذف شود؟`} loading={deleting} onCancel={() => setToDelete(null)} onConfirm={confirmDelete} />
+      )}
+    </div>
+  )
+}
+
+const emptyEpisode = { episode_number: "", title: "", description: "", runtime: "", air_date: "", vote_average: "", still_image_url: "" }
+
+function EpisodesManager({ seasonId }) {
+  const [episodes, setEpisodes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [form, setForm] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [toDelete, setToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const load = () => {
+    setLoading(true)
+    episodesApi.list({ season: seasonId, page_size: 100, ordering: "episode_number" })
+      .then((d) => setEpisodes(d.items))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }
+  useEffect(load, [seasonId])
+
+  if (loading) return <p className="flex items-center gap-2 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /> در حال بارگذاری قسمت‌ها...</p>
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const payload = {
+        ...form, season: Number(seasonId),
+        episode_number: Number(form.episode_number),
+        runtime: form.runtime === "" ? null : Number(form.runtime),
+        vote_average: form.vote_average === "" ? null : form.vote_average,
+        air_date: form.air_date || null,
+      }
+      if (form.id) await episodesApi.update(form.id, payload)
+      else await episodesApi.create(payload)
+      setForm(null); load()
+    } finally { setSaving(false) }
+  }
+
+  const confirmDelete = async () => {
+    setDeleting(true)
+    try { await episodesApi.remove(toDelete.id); setEpisodes((p) => p.filter((e) => e.id !== toDelete.id)); setToDelete(null) }
+    finally { setDeleting(false) }
+  }
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  return (
+    <div className="space-y-3">
+      {episodes.length === 0 && !form && <p className="text-sm text-zinc-500">هنوز قسمتی برای این فصل ثبت نشده است.</p>}
+      {episodes.map((ep) => (
+        <div key={ep.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-3.5 py-3">
+          <Badge tone="red">قسمت {ep.episode_number}</Badge>
+          <span className="text-sm text-zinc-200">{ep.title}</span>
+          <span className="text-xs text-zinc-500">{ep.runtime ? `${ep.runtime} دقیقه` : ""} {ep.air_date || ""}</span>
+          <span className="ms-auto flex gap-1.5">
+            <button type="button" onClick={() => setForm({ ...emptyEpisode, ...ep, air_date: ep.air_date || "", still_image_url: ep.still_image_url || "" })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10" aria-label="ویرایش قسمت">
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" onClick={() => setToDelete(ep)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20" aria-label="حذف قسمت">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </span>
+          <div className="w-full">
+            <DownloadsManager targetType="episode" objectId={ep.id} />
+          </div>
+        </div>
+      ))}
+
+      {form ? (
+        <div className="grid grid-cols-1 gap-3 rounded-xl border border-red-500/20 bg-red-500/[0.04] p-4 sm:grid-cols-2">
+          <Field label="شماره قسمت *"><input type="number" min="1" value={form.episode_number} onChange={set("episode_number")} className={inputCls} /></Field>
+          <Field label="عنوان *"><input value={form.title} onChange={set("title")} className={inputCls} /></Field>
+          <Field label="مدت (دقیقه)"><input type="number" min="0" value={form.runtime} onChange={set("runtime")} className={inputCls} /></Field>
+          <Field label="تاریخ پخش"><input type="date" value={form.air_date} onChange={set("air_date")} className={inputCls} /></Field>
+          <Field label="امتیاز"><input type="number" step="0.1" min="0" max="10" value={form.vote_average} onChange={set("vote_average")} className={inputCls} /></Field>
+          <Field label="لینک تصویر قسمت"><input value={form.still_image_url} dir="ltr" onChange={set("still_image_url")} className={inputCls} /></Field>
+          <div className="sm:col-span-2">
+            <Field label="خلاصه قسمت"><textarea rows={3} value={form.description} onChange={set("description")} className={`${inputCls} resize-y`} /></Field>
+          </div>
+          <div className="flex gap-2 sm:col-span-2">
+            <PrimaryBtn type="button" onClick={save} disabled={saving}>{saving && <Loader2 className="h-4 w-4 animate-spin" />} ذخیره قسمت</PrimaryBtn>
+            <GhostBtn type="button" onClick={() => setForm(null)}>انصراف</GhostBtn>
+          </div>
+        </div>
+      ) : (
+        <GhostBtn type="button" onClick={() => setForm({ ...emptyEpisode })}>
+          <Plus className="h-4 w-4" /> افزودن قسمت
+        </GhostBtn>
+      )}
+
+      {toDelete && (
+        <ConfirmModal title="حذف قسمت" message={`قسمت ${toDelete.episode_number} «${toDelete.title}» حذف شود؟`} loading={deleting} onCancel={() => setToDelete(null)} onConfirm={confirmDelete} />
+      )}
+    </div>
   )
 }

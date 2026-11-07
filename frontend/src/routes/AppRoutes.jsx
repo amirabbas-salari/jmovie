@@ -32,20 +32,30 @@ import PrizePage from '../pages/PrizePage'
 // actor detail
 import ActorDetailPage from '../pages/ActorDetailPage'
 
-// admin
+// admin — همه‌ی صفحات پنل lazy هستند تا باندل اصلی سایت سنگین نشود
+// و پنل هم فقط وقتی باز می‌شود کد خودش را لود کند.
+import { lazy } from "react"
 import AdminRoute from "../admin/routes/AdminRoute"
 import AdminLayout from "../admin/layout/AdminLayout"
-import Dashboard from "../admin/pages/Dashboard"
-import Movies from "../admin/pages/Movies"
-import MovieForm from '../admin/pages/MovieForm'
-import Series from "../admin/pages/Series"
-import SeriesForm from "../admin/pages/SeriesForm"
-import Genres from "../admin/pages/Genres"
-import GenreForm from "../admin/pages/GenreForm"
-import Users from "../admin/pages/Users"
-import UserForm from "../admin/pages/UserForm"
 import NotAuthorized from "../admin/pages/NotAuthorized"
-import { User } from 'lucide-react'
+
+const Dashboard = lazy(() => import("../admin/pages/Dashboard"))
+const Movies = lazy(() => import("../admin/pages/Movies"))
+const MovieForm = lazy(() => import("../admin/pages/MovieForm"))
+const Series = lazy(() => import("../admin/pages/Series"))
+const SeriesForm = lazy(() => import("../admin/pages/SeriesForm"))
+const People = lazy(() => import("../admin/pages/People"))
+const PersonForm = lazy(() => import("../admin/pages/PersonForm"))
+const Genres = lazy(() => import("../admin/pages/Genres"))
+const GenreForm = lazy(() => import("../admin/pages/GenreForm"))
+const Collections = lazy(() => import("../admin/pages/Collections"))
+const CollectionForm = lazy(() => import("../admin/pages/CollectionForm"))
+const Downloads = lazy(() => import("../admin/pages/Downloads"))
+const Comments = lazy(() => import("../admin/pages/Comments"))
+const Users = lazy(() => import("../admin/pages/Users"))
+const UserForm = lazy(() => import("../admin/pages/UserForm"))
+const Roles = lazy(() => import("../admin/pages/Roles"))
+const AuditLogs = lazy(() => import("../admin/pages/AuditLogs"))
 
 function AppRoutes() {
   return (
@@ -100,13 +110,28 @@ function AppRoutes() {
           <Route path="genres/new" element={<GenreForm />} />
           <Route path="genres/:id/edit" element={<GenreForm />} />
 
+          {/* people */}
+          <Route path="people" element={<People />} />
+          <Route path="people/new" element={<PersonForm />} />
+          <Route path="people/:id/edit" element={<PersonForm />} />
+
+          {/* collections */}
+          <Route path="collections" element={<Collections />} />
+          <Route path="collections/new" element={<CollectionForm />} />
+          <Route path="collections/:id/edit" element={<CollectionForm />} />
+
+          {/* downloads & comments */}
+          <Route path="downloads" element={<Downloads />} />
+          <Route path="comments" element={<Comments />} />
+
           {/* users */}
           <Route path="users" element={<Users />} />
           <Route path="users/new" element={<UserForm />} />
           <Route path="users/:id/edit" element={<UserForm />} />
 
-
-          {/* <Route path="users" element={<Users />} /> */}
+          {/* roles & audit (فقط سوپرادمین) */}
+          <Route path="roles" element={<Roles />} />
+          <Route path="audit-logs" element={<AuditLogs />} />
         </Route>
       </Route>
     </Routes>
