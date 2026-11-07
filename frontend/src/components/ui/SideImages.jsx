@@ -1,7 +1,7 @@
-import deadpool from "../../assets/success_signup/deadpool.png";
-import raya from "../../assets/success_signup/raya.png";
-import avatar from "../../assets/success_signup/avatar.png";
-import minions from "../../assets/success_signup/minions.png";
+import deadpool from "../../assets/success_signup/deadpool.webp";
+import raya from "../../assets/success_signup/raya.webp";
+import avatar from "../../assets/success_signup/avatar.webp";
+import minions from "../../assets/success_signup/minions.webp";
 
 export default function SideImages({ showMinions = true, showOther = true }) {
   return (

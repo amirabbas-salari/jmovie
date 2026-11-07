@@ -455,7 +455,7 @@ function AuthPage() {
           <div className="w-full max-w-4xl">
             <div className="overflow-hidden rounded-[28px] bg-[#06113a] shadow-2xl">
               <img
-                src="../src/assets/for-login.png"
+                src="../src/assets/for-login.webp"
                 alt="Fantasy visual"
                 className="h-[420px] w-full object-cover md:h-[560px] lg:h-[600px]"
               />

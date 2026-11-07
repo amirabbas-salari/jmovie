@@ -23,7 +23,18 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS: دامنه‌های مجاز را با CORS_ALLOWED_ORIGINS (کاما جدا) ست کنید.
+# پیش‌فرض: لوکال + زیردامنه‌های netlify.app (فرانت این پروژه) تا بدون
+# تنظیم دستی هم کار کند. CORS_ALLOW_ALL_ORIGINS=True فقط برای توسعه.
+CORS_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    if o.strip()
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://([a-z0-9-]+\.)*netlify\.app$",
+]
+CORS_ALLOW_ALL_ORIGINS = os.getenv("CORS_ALLOW_ALL_ORIGINS", "False") == "True"
 
 
 AUTH_USER_MODEL = "accounts.User"
@@ -39,7 +50,14 @@ SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-LOCAL-DEV-ONLY-change-me-i
 # DEBUG = True
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = ["*"]
+# هاست‌های مجاز با ALLOWED_HOSTS (کاما جدا) از محیط خوانده می‌شوند.
+# هشدار: اگر ست نشود برای جلوگیری از ازکارافتادن دیپلویمنت "*" می‌ماند؛
+# در production حتماً دامنه‌ی واقعی بک‌اند را ست کنید.
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.getenv("ALLOWED_HOSTS", "*").split(",")
+    if h.strip()
+]
 
 
 # Application definition
@@ -127,8 +145,10 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=5),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    # قبلاً access فقط ۵ دقیقه بود و کاربر مدام لاگ‌اوت می‌شد؛ حالا ۳۰ دقیقه
+    # (قابل تنظیم با JWT_ACCESS_MINUTES) و refresh هفت‌روزه.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", "30"))),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "7"))),
 }
 
 

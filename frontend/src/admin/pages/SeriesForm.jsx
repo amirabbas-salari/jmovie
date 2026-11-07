@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { ArrowRight, Loader2, Pencil, Plus, Save, Trash2 } from "lucide-react"
 import { episodesApi, genresApi, seasonsApi, seriesApi, getApiError, getFieldErrors } from "../services/adminApi"
 import { CastEditor, DownloadsManager, GalleryEditor } from "../components/editors"
+import TmdbLookup from "../components/TmdbLookup"
 import { Badge, ConfirmModal, ErrorBox, Field, GhostBtn, PrimaryBtn, Spinner, Toggle, cardCls, inputCls } from "../components/ui"
 
 const emptyForm = {
@@ -72,6 +73,29 @@ export default function SeriesForm() {
   const toggleGenre = (gid) =>
     setForm((f) => ({ ...f, genre_ids: f.genre_ids.includes(gid) ? f.genre_ids.filter((g) => g !== gid) : [...f.genre_ids, gid] }))
 
+  // پر کردن فرم از TMDB: فقط فیلدهای خالی پر می‌شوند
+  const applyTmdb = (data, genreIds, castItems) => {
+    setForm((f) => ({
+      ...f,
+      title: f.title || data.title || "",
+      original_title: f.original_title || data.original_title || "",
+      imdb_id: data.imdb_id || f.imdb_id,
+      tmdb_id: data.tmdb_id ?? f.tmdb_id,
+      description: f.description || data.description || "",
+      start_date: f.start_date || data.start_date || "",
+      end_date: f.end_date || data.end_date || "",
+      imdb_rating: f.imdb_rating === "" ? (data.imdb_rating ?? "") : f.imdb_rating,
+      imdb_votes: f.imdb_votes === "" ? (data.imdb_votes ?? "") : f.imdb_votes,
+      poster_url: f.poster_url || data.poster_url || "",
+      backdrop_url: f.backdrop_url || data.backdrop_url || "",
+      number_of_seasons: f.number_of_seasons === "" ? (data.number_of_seasons ?? "") : f.number_of_seasons,
+      number_of_episodes: f.number_of_episodes === "" ? (data.number_of_episodes ?? "") : f.number_of_episodes,
+      is_ended: data.is_ended ?? f.is_ended,
+      genre_ids: [...new Set([...f.genre_ids, ...genreIds])],
+    }))
+    if (castItems.length) setCast(castItems)
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true); setError(""); setFieldErrors({})
@@ -128,6 +152,8 @@ export default function SeriesForm() {
       </div>
 
       <ErrorBox message={error} />
+
+      <TmdbLookup mediaType="series" onApply={applyTmdb} />
 
       <div className="mb-5 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.03] p-1">
         {TABS.map((t) => (

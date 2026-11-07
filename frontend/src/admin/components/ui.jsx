@@ -207,7 +207,7 @@ export function useAdminList(fetcher, deps = []) {
     setLoading(true)
     load()
       .then((data) => { if (alive) { setItems(data.items); setTotal(data.total); setError("") } })
-      .catch((e) => { if (alive) setError(e?.response?.data?.detail || "خطا در دریافت اطلاعات") })
+      .catch((e) => { if (alive) setError(e?.response?.data?.detail || e?.message || "خطا در دریافت اطلاعات") })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [load])

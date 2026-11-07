@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.db.models import Count, Prefetch, Sum
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -16,6 +18,8 @@ from genres.models import Genre
 from movies.models import Movie, MovieCast
 from people.models import Person
 from series.models import Episode, Season, Series
+
+from movies.services.tmdb import TMDBClient
 
 from .models import AdminAuditLog
 from .permissions import HasModelPermission, IsStaffMember, IsSuperAdmin
@@ -140,6 +144,16 @@ class AdminPermissionCatalogView(APIView):
 
 
 class AdminDashboardView(APIView):
+    @staticmethod
+    def _recent_activity():
+        # اگر مایگریشن adminAPI هنوز روی دیتابیس اجرا نشده باشد (جدول لاگ
+        # وجود نداشته باشد) داشبورد نباید کامل از کار بیفتد.
+        try:
+            logs = AdminAuditLog.objects.all()[:8]
+            return AdminAuditLogSerializer(logs, many=True).data
+        except Exception:
+            return []
+
     """
     داشبورد در «یک» درخواست: قبلاً فرانت ۴ لیست کامل را می‌گرفت تا فقط
     count نشان دهد. اینجا همه‌چیز با کوئری‌های aggregate سبک شمرده می‌شود.
@@ -173,9 +187,137 @@ class AdminDashboardView(APIView):
             "latest_movies": AdminMovieListSerializer(latest_movies, many=True, context={"request": request}).data,
             "latest_series": AdminSeriesListSerializer(latest_series, many=True, context={"request": request}).data,
             "pending_comments": AdminCommentSerializer(pending_comments, many=True, context={"request": request}).data,
-            "recent_activity": AdminAuditLogSerializer(AdminAuditLog.objects.all()[:8], many=True).data,
+            "recent_activity": self._recent_activity(),
         }
         return Response(data)
+
+
+
+
+TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/"
+
+
+def _tmdb_img(path, size):
+    return f"{TMDB_IMAGE_BASE}{size}{path}" if path else ""
+
+
+class TmdbLookupView(APIView):
+    """
+    دریافت خودکار اطلاعات از TMDB برای فرم فیلم/سریال پنل.
+
+    GET /admin/tmdb/lookup/?type=movie|series&by=imdb_id|tmdb_id&value=tt0816692
+    پاسخ نرمال‌شده برمی‌گرداند + مشخص می‌کند کدام ژانرها/افراد از قبل در
+    دیتابیس لوکال هستند (local_id) تا فرانت بقیه را در صورت نیاز بسازد.
+    نتیجه ۲۴ ساعت کش می‌شود تا هم سریع باشد هم سقف TMDB مصرف نشود.
+    """
+    permission_classes = [IsStaffMember]
+
+    def get(self, request):
+        if not settings.TMDB_API_KEY:
+            return Response(
+                {"detail": "کلید TMDB_API_KEY در سرور تنظیم نشده است."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        media_type = request.query_params.get("type", "movie")
+        by = request.query_params.get("by", "imdb_id")
+        value = (request.query_params.get("value") or "").strip()
+        if media_type not in ("movie", "series") or by not in ("imdb_id", "tmdb_id") or not value:
+            return Response({"detail": "پارامترهای type/by/value معتبر نیستند."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        cache_key = f"tmdb-lookup:{media_type}:{by}:{value}"
+        cached = cache.get(cache_key)
+        if cached:
+            return Response(cached)
+
+        client = TMDBClient()
+        try:
+            if by == "imdb_id":
+                tmdb_id = client.find_movie(value) if media_type == "movie" else client.find_tv(value)
+                if not tmdb_id:
+                    return Response({"detail": "با این IMDb ID چیزی در TMDB پیدا نشد."},
+                                    status=status.HTTP_404_NOT_FOUND)
+            else:
+                tmdb_id = int(value)
+            data = (client.movie_full_details(tmdb_id) if media_type == "movie"
+                    else client.tv_full_details(tmdb_id))
+        except (ValueError, TypeError):
+            return Response({"detail": "TMDB ID باید عدد باشد."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response({"detail": "ارتباط با TMDB برقرار نشد؛ دوباره تلاش کنید."},
+                            status=status.HTTP_502_BAD_GATEWAY)
+
+        payload = self._normalize(media_type, data)
+        cache.set(cache_key, payload, 60 * 60 * 24)
+        return Response(payload)
+
+    @staticmethod
+    def _normalize(media_type, data):
+        is_movie = media_type == "movie"
+        credits = data.get("credits") or {}
+        cast_items = []
+        seen = set()
+
+        def _person_item(person, role, character=""):
+            key = (person.get("id"), role)
+            if not person.get("id") or key in seen:
+                return
+            seen.add(key)
+            local = Person.objects.filter(tmdb_id=str(person["id"])).first()
+            cast_items.append({
+                "tmdb_id": str(person["id"]),
+                "name": person.get("name") or "",
+                "role": role,
+                "character_name": character or "",
+                "profile_image_url": _tmdb_img(person.get("profile_path"), "w185"),
+                "local_id": local.id if local else None,
+            })
+
+        for member in (credits.get("cast") or [])[:12]:
+            _person_item(member, "actor", member.get("character") or "")
+        for member in credits.get("crew") or []:
+            if member.get("job") == "Director":
+                _person_item(member, "director")
+            elif member.get("department") == "Writing" and member.get("job") in ("Writer", "Screenplay", "Novel"):
+                _person_item(member, "writer")
+
+        genre_items = []
+        for genre in data.get("genres") or []:
+            local = Genre.objects.filter(tmdb_id=genre.get("id")).first()
+            genre_items.append({
+                "tmdb_id": genre.get("id"),
+                "name": genre.get("name") or "",
+                "local_id": local.id if local else None,
+            })
+
+        countries = data.get("production_countries") or []
+        runtime = data.get("runtime")
+        if not is_movie:
+            run_times = data.get("episode_run_time") or []
+            runtime = run_times[0] if run_times else None
+
+        return {
+            "type": media_type,
+            "tmdb_id": data.get("id"),
+            "imdb_id": (data.get("external_ids") or {}).get("imdb_id") or data.get("imdb_id") or "",
+            "title": (data.get("title") if is_movie else data.get("name")) or "",
+            "original_title": (data.get("original_title") if is_movie else data.get("original_name")) or "",
+            "description": data.get("overview") or "",
+            "release_date": (data.get("release_date") if is_movie else data.get("first_air_date")) or "",
+            "start_date": "" if is_movie else (data.get("first_air_date") or ""),
+            "end_date": "" if is_movie else (data.get("last_air_date") or ""),
+            "runtime": runtime,
+            "imdb_rating": round(float(data["vote_average"]), 1) if data.get("vote_average") else None,
+            "imdb_votes": data.get("vote_count") or 0,
+            "poster_url": _tmdb_img(data.get("poster_path"), "w500"),
+            "backdrop_url": _tmdb_img(data.get("backdrop_path"), "w1280"),
+            "country": countries[0].get("name", "") if countries else "",
+            "number_of_seasons": data.get("number_of_seasons"),
+            "number_of_episodes": data.get("number_of_episodes"),
+            "is_ended": (data.get("status") == "Ended") if not is_movie else None,
+            "genres": genre_items,
+            "cast": cast_items,
+        }
 
 
 # ---------------------------------------------------------------------------

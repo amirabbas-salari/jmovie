@@ -54,3 +54,14 @@ python manage.py create_admin_roles      # ساخت ۳ نقش آماده (اخت
 ```bash
 python manage.py test adminAPI   # تست‌های سطح دسترسی (سوپرادمین/نقش‌ها/جلوگیری از ارتقای دسترسی)
 ```
+
+## به‌روزرسانی‌ها
+
+* `SECRET_KEY` و `TMDB_API_KEY` فقط از محیط خوانده می‌شوند؛ `ALLOWED_HOSTS` و
+  `CORS_ALLOWED_ORIGINS` هم محیطی شده‌اند (نمونه در `backend/jmovie/.env.example`).
+* طول عمر Access Token به ۳۰ دقیقه (قابل تنظیم با `JWT_ACCESS_MINUTES`) رسید.
+* تنها فایل مرجع نیازمندی‌ها `backend/jmovie/requirements.txt` است (UTF-8).
+* تصاویر سنگین فرانت به WebP تبدیل شدند (کل `src/assets` از ~۲۴MB به ~۰.۷۵MB).
+* در فرم فیلم/سریال باکس «دریافت خودکار از TMDB» اضافه شد: با IMDb/TMDB ID
+  اطلاعات، پوستر، ژانرها و عوامل پر می‌شود و موارد گمشده خودکار ساخته می‌شوند.
+  نتیجه‌ی TMDB بیست‌وچهار ساعت کش می‌شود. نیازمند `TMDB_API_KEY` در سرور است.

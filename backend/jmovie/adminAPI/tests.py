@@ -1,9 +1,12 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
-from django.test import TestCase
+from unittest.mock import patch
+
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from genres.models import Genre
+from people.models import Person
 from movies.models import Movie
 
 User = get_user_model()
@@ -99,3 +102,53 @@ class AdminRBACTest(TestCase):
         self.assertEqual(logs.status_code, 200)
         self.assertGreaterEqual(logs.data["count"], 1)
         self.assertTrue(Genre.objects.filter(slug="action").exists())
+
+
+class TmdbLookupTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.superadmin = make_user("tmdbroot", is_staff=True, is_superuser=True)
+        Genre.objects.create(name="درام", slug="drama", tmdb_id=18)
+        Person.objects.create(tmdb_id="500", name="بازیگر موجود")
+
+    def test_lookup_requires_staff(self):
+        regular = make_user("plain")
+        self.client.force_authenticate(user=regular)
+        self.assertEqual(self.client.get("/admin/tmdb/lookup/", {"type": "movie", "value": "tt1"}).status_code, 403)
+
+    def test_lookup_without_api_key_returns_503(self):
+        self.client.force_authenticate(user=self.superadmin)
+        with override_settings(TMDB_API_KEY=""):
+            resp = self.client.get("/admin/tmdb/lookup/", {"type": "movie", "value": "tt0816692"})
+        self.assertEqual(resp.status_code, 503)
+
+    def test_lookup_normalizes_and_matches_local(self):
+        self.client.force_authenticate(user=self.superadmin)
+        fake_data = {
+            "id": 27205, "title": "Inception", "original_title": "Inception",
+            "overview": "خواب در خواب", "release_date": "2010-07-16", "runtime": 148,
+            "vote_average": 8.4, "vote_count": 35000,
+            "poster_path": "/p.jpg", "backdrop_path": "/b.jpg",
+            "production_countries": [{"name": "United States"}],
+            "external_ids": {"imdb_id": "tt1375666"},
+            "genres": [{"id": 18, "name": "درام"}, {"id": 878, "name": "علمی‌تخیلی"}],
+            "credits": {
+                "cast": [{"id": 500, "name": "بازیگر موجود", "character": "Cobb", "profile_path": "/a.jpg"},
+                         {"id": 999, "name": "فرد جدید", "character": "X", "profile_path": None}],
+                "crew": [{"id": 501, "name": "کارگردان", "job": "Director", "profile_path": None}],
+            },
+        }
+        with override_settings(TMDB_API_KEY="test-key"), \
+                patch("adminAPI.views.TMDBClient") as MockClient:
+            MockClient.return_value.movie_full_details.return_value = fake_data
+            resp = self.client.get("/admin/tmdb/lookup/", {"type": "movie", "by": "tmdb_id", "value": "27205"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["title"], "Inception")
+        self.assertEqual(resp.data["imdb_id"], "tt1375666")
+        self.assertTrue(resp.data["poster_url"].endswith("/p.jpg"))
+        genres = {g["tmdb_id"]: g["local_id"] for g in resp.data["genres"]}
+        self.assertIsNotNone(genres[18])
+        self.assertIsNone(genres[878])
+        cast = {c["tmdb_id"]: c for c in resp.data["cast"]}
+        self.assertIsNotNone(cast["500"]["local_id"])
+        self.assertEqual(cast["501"]["role"], "director")

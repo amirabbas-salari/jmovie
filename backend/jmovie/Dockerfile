@@ -15,4 +15,4 @@ RUN python manage.py collectstatic --noinput
 
 EXPOSE 8080
 
-CMD sh -c "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"
+CMD sh -c "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT"

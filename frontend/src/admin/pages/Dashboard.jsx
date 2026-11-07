@@ -37,10 +37,16 @@ export default function Dashboard() {
     getAdminDashboard()
       .then((d) => {
         if (!alive) return
+        if (!d || typeof d !== "object" || !d.stats) {
+          setError("پاسخ داشبورد از سرور معتبر نیست — آدرس API (VITE_API_BASE_URL) یا وضعیت بک‌اند را بررسی کنید.")
+          return
+        }
         setData(d)
         setPending(d.pending_comments || [])
       })
-      .catch(() => { if (alive) setError("خطا در دریافت آمار داشبورد") })
+      .catch((err) => {
+        if (alive) setError(err?.message || "خطا در دریافت آمار داشبورد — اتصال به بک‌اند را بررسی کنید.")
+      })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [])
@@ -117,7 +123,7 @@ export default function Dashboard() {
         <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <h2 className="mb-4 font-bold text-zinc-100">آخرین فیلم‌ها</h2>
           <ul className="space-y-2.5">
-            {data.latest_movies.map((m) => (
+            {(data.latest_movies || []).map((m) => (
               <li key={m.id}>
                 <Link to={`/admin/movies/${m.id}/edit`} className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-white/5">
                   {m.poster_display
