@@ -3,61 +3,49 @@ import raya from "../../assets/success_signup/raya.webp";
 import avatar from "../../assets/success_signup/avatar.webp";
 import minions from "../../assets/success_signup/minions.webp";
 
+// تصاویر تزئینی کناری (کاراکترها) فقط دکور دسکتاپ هستند.
+// قبلاً در موبایل هم به‌صورت fixed با ارتفاع زیاد پایین صفحه می‌نشستند و
+// روی کارت‌ها، متن و ناوبری پایین می‌افتادند و لی‌اوت را خراب می‌کردند؛
+// حالا زیر lg کاملاً مخفی‌اند و کانتینرشان هم overflow را می‌بندد تا
+// هیچ اسکرول افقی‌ای ساخته نشود.
 export default function SideImages({ showMinions = true, showOther = true }) {
   return (
-    <div className="pointer-events-none">
-      
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-0 hidden select-none overflow-hidden lg:block"
+    >
       {showOther && (
         <>
-
-            {/* deadpool */}
-            <img
+          {/* deadpool */}
+          <img
             src={deadpool}
             alt=""
-            aria-hidden="true"
-            className="
-                fixed bottom-0 left-2
-                h-[200px] sm:h-[320px] md:h-[320px] lg:h-[350px] xl:h-[450px]
-                w-auto select-none object-contain
-            "
-            />
+            className="absolute bottom-0 left-2 h-[320px] w-auto object-contain lg:h-[350px] xl:h-[450px]"
+          />
 
-            {/* raya */}
-            <img
+          {/* raya */}
+          <img
             src={raya}
             alt=""
-            aria-hidden="true"
-            className="
-                fixed
-                h-[200px] sm:h-[220px] md:h-[320px] lg:h-[450px] xl:h-[600px]
-                bottom-[700px] sm:bottom-[500px] md:bottom-[500px] lg:bottom-[450px] xl:bottom-80
-                -left-[131px] sm:-left-[143px] md:-left-[208px] lg:-left-[292px] xl:-left-[390px]
-                w-auto select-none object-contain
-            "
-            />
+            className="absolute bottom-[450px] -left-[208px] h-[320px] w-auto object-contain lg:-left-[292px] xl:bottom-80 xl:-left-[390px] xl:h-[600px]"
+          />
 
-            {/* avatar */}
-            <img
+          {/* avatar */}
+          <img
             src={avatar}
             alt=""
-            aria-hidden="true"
-            className="
-                fixed bottom-0
-                h-[220px] sm:h-[300px] md:h-[350px] lg:h-[650px] xl:h-[850px]
-                right-[40px] sm:right-[28px] md:right-[35px] lg:-right-6 xl:-right-6
-                w-auto select-none object-contain
-            "
-            />
+            className="absolute bottom-0 right-[35px] h-[350px] w-auto object-contain lg:-right-6 lg:h-[650px] xl:h-[850px]"
+          />
         </>
       )}
 
-      {/* minions */}
+      {/* minions — قبلاً right-[825px] هاردکد بود و در صفحات باریک
+          بیرون از کادر قرار می‌گرفت؛ حالا وسط‌چین و فقط در دسکتاپ است */}
       {showMinions && (
         <img
           src={minions}
           alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute top-[110px] right-[825px] -translate-x-1/2 h-[115px] w-auto select-none object-contain"
+          className="absolute left-1/2 top-[110px] h-[115px] w-auto -translate-x-1/2 object-contain"
         />
       )}
     </div>
