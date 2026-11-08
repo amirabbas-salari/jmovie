@@ -2,14 +2,15 @@ import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   HelpCircle,
-  Map,
-  Crown,
   Megaphone,
-  Code2,
-  Briefcase,
   ShieldCheck,
-  Smartphone,
   Send,
+  Film,
+  Tv,
+  LibraryBig,
+  LifeBuoy,
+  Heart,
+  UserRound,
 } from "lucide-react";
 import {
   FaInstagram,
@@ -28,29 +29,30 @@ const socials = [
   { Icon: FaFacebookF, href: "#", label: "فیسبوک" },
 ];
 
-// ستون‌های دسترسی سریع
+// ستون‌های دسترسی سریع — فقط مسیرهایی که واقعاً در سایت وجود دارند
 const columns = [
+  {
+    title: "دسترسی سریع",
+    links: [
+      { Icon: Film, text: "فیلم‌ها", to: "/movies" },
+      { Icon: Tv, text: "سریال‌ها", to: "/series" },
+      { Icon: LibraryBig, text: "مجموعه‌ها", to: "/collection" },
+    ],
+  },
   {
     title: "راهنما",
     links: [
       { Icon: HelpCircle, text: "سوالات متداول", to: "/faq" },
-      { Icon: Map, text: "نقشه سایت", to: "/sitemap" },
-      { Icon: ShieldCheck, text: "حریم خصوصی", to: "/privacy" },
+      { Icon: LifeBuoy, text: "پشتیبانی", to: "/support" },
+      { Icon: ShieldCheck, text: "حریم خصوصی و قوانین", to: "/faq" },
     ],
   },
   {
-    title: "خدمات",
+    title: "مووی‌ورس",
     links: [
-      { Icon: Crown, text: "اشتراک ویژه", to: "/premium" },
-      { Icon: Smartphone, text: "اپلیکیشن موبایل", to: "/app" },
-      { Icon: Megaphone, text: "تبلیغات", to: "/ads" },
-    ],
-  },
-  {
-    title: "همکاری",
-    links: [
-      { Icon: Briefcase, text: "فرصت‌های شغلی", to: "/careers" },
-      { Icon: Code2, text: "توسعه‌دهندگان", to: "/developers" },
+      { Icon: Heart, text: "حمایت از ما", to: "/pricing" },
+      { Icon: Megaphone, text: "تبلیغات", to: "/support" },
+      { Icon: UserRound, text: "پروفایل من", to: "/profile" },
     ],
   },
 ];
@@ -187,19 +189,19 @@ export default function MainFooter() {
 
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link
-              to="/terms"
+              to="/support"
               className="transition hover:text-zinc-300"
             >
-              قوانین و مقررات
+              پشتیبانی
             </Link>
 
             <span className="hidden h-1 w-1 rounded-full bg-zinc-600 sm:block" />
 
             <Link
-              to="/privacy"
+              to="/faq"
               className="transition hover:text-zinc-300"
             >
-              حریم خصوصی
+              سوالات متداول
             </Link>
           </div>
         </div>

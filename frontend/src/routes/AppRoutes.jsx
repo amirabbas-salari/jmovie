@@ -8,6 +8,8 @@ import Login from '../pages/auth/Login'
 import EditProfilePage from '../pages/auth/EditProfilePage'
 
 import NotFound from '../pages/NotFound'
+import ScrollToTop from '../components/ui/ScrollToTop'
+import ProtectedRoute from './ProtectedRoute'
 import MainLayout from '../layout/MainLayout'
 
 // movie
@@ -59,6 +61,8 @@ const AuditLogs = lazy(() => import("../admin/pages/AuditLogs"))
 
 function AppRoutes() {
   return (
+    <>
+    <ScrollToTop />
     <Routes>
       <Route element={<MainLayout />}>
         <Route path="/" element={<Home />} />
@@ -69,7 +73,7 @@ function AppRoutes() {
         <Route path="/series" element={<SeriesPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/faq" element={<SupportPage />} />
-        <Route path="/profile" element={<EditProfilePage />} />
+        <Route path="/profile" element={<ProtectedRoute><EditProfilePage /></ProtectedRoute>} />
         <Route path="/person/:slug" element={<ActorDetailPage />} />
         <Route path="/genre/:slug" element={<GenreDetailsPage />} />
         <Route path="/pricing" element={<PrizePage />} />
@@ -135,6 +139,7 @@ function AppRoutes() {
         </Route>
       </Route>
     </Routes>
+    </>
   )
 }
 
