@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { FiBookmark, FiThumbsUp, FiThumbsDown, FiPlay, FiEye } from "react-icons/fi";
+import { FiBookmark, FiCheck, FiHeart, FiThumbsUp, FiThumbsDown, FiPlay, FiEye } from "react-icons/fi";
 import { backdropImage, backdropSrcSet } from "../../utils/image";
+import { useMyLists } from "../../context/MyListsContext";
 
 const IconButton = ({ active, onClick, label, children }) => (
   <button
@@ -30,9 +31,12 @@ const Badge = ({ children }) => (
   </span>
 );
 
-export default function DetailsHero({ media }) {
-  const [bookmarked, setBookmarked] = useState(false);
+export default function DetailsHero({ media, mediaType = "movie" }) {
   const [reaction, setReaction] = useState(null);
+  const { isIn, toggle } = useMyLists();
+  const inFavorite = isIn("favorite", mediaType, media?.id);
+  const inWatchlist = isIn("watchlist", mediaType, media?.id);
+  const inWatched = isIn("watched", mediaType, media?.id);
 
   return (
     <section
@@ -113,8 +117,14 @@ export default function DetailsHero({ media }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
           {/* اکشن‌های ثانویه */}
           <div className="order-2 flex items-center gap-2.5 sm:order-1">
-            <IconButton label="Bookmark" active={bookmarked} onClick={() => setBookmarked((v) => !v)}>
-              <FiBookmark className={bookmarked ? "fill-current" : ""} />
+            <IconButton label="افزودن به علاقه‌مندی‌ها" active={inFavorite} onClick={() => toggle("favorite", mediaType, media?.id)}>
+              <FiHeart className={inFavorite ? "fill-current" : ""} />
+            </IconButton>
+            <IconButton label="افزودن به لیست تماشا" active={inWatchlist} onClick={() => toggle("watchlist", mediaType, media?.id)}>
+              <FiBookmark className={inWatchlist ? "fill-current" : ""} />
+            </IconButton>
+            <IconButton label="دیده‌ام" active={inWatched} onClick={() => toggle("watched", mediaType, media?.id)}>
+              <FiCheck />
             </IconButton>
             <IconButton label="Like" active={reaction === "like"} onClick={() => setReaction((r) => (r === "like" ? null : "like"))}>
               <FiThumbsUp />

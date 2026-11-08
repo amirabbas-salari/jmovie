@@ -37,25 +37,33 @@ class CollectionItemSerializer(
 
     def get_media(self, obj):
 
+        # media_type را صریح برمی‌گردانیم تا فرانت‌اند (ناوبری کارت و
+        # دکمه‌های لیست علاقه‌مندی/تماشا) مجبور به حدس‌زدن نوع آیتم نباشد.
         if isinstance(
             obj.content_object,
             Movie
         ):
 
-            return MovieListSerializer(
-                obj.content_object,
-                context=self.context,
-            ).data
+            return {
+                **MovieListSerializer(
+                    obj.content_object,
+                    context=self.context,
+                ).data,
+                "media_type": "movie",
+            }
 
         if isinstance(
             obj.content_object,
             Series
         ):
 
-            return SeriesListSerializer(
-                obj.content_object,
-                context=self.context,
-            ).data
+            return {
+                **SeriesListSerializer(
+                    obj.content_object,
+                    context=self.context,
+                ).data,
+                "media_type": "series",
+            }
 
         return None
 

@@ -111,34 +111,6 @@ export default function useMediaList(endpoint, mapper) {
     }
   }, [endpoint, mapper, searchKey]);
 
-  const handleToggleWatchlist = useCallback(async (mediaId, add) => {
-    setMedia((prev) =>
-      prev.map((item) =>
-        item.id === mediaId
-          ? { ...item, inWatchlist: add }
-          : item
-      )
-    );
-
-    try {
-      if (add) {
-        await api.post(`/watchlist/${mediaId}`);
-      } else {
-        await api.delete(`/watchlist/${mediaId}`);
-      }
-    } catch (err) {
-      console.error(err);
-
-      setMedia((prev) =>
-        prev.map((item) =>
-          item.id === mediaId
-            ? { ...item, inWatchlist: !add }
-            : item
-        )
-      );
-    }
-  }, []);
-
   /*
    * هنگام تغییر فیلترها
    * صفحه به ۱ برگردد.
@@ -189,6 +161,5 @@ export default function useMediaList(endpoint, mapper) {
 
     pagination,
 
-    onToggleWatchlist: handleToggleWatchlist,
   };
 }

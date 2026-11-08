@@ -20,10 +20,6 @@ const MovieDetails = () => {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // TODO: افزودن به لیست بعدا پیاده‌سازی می‌شود
-  const handleAddToList = (item) => {
-    console.log("add to list:", item);
-  };
 
   // ارسال کامنت جدید
   const handleAddComment = async (text) => {
@@ -97,7 +93,7 @@ const MovieDetails = () => {
 
   return (
     <main className="bg-[#1A0B0C]">
-      <DetailsHero media={movie} onAddToList={() => handleAddToList(movie)} />
+      <DetailsHero media={movie} mediaType="movie" />
       <Gallery images={movie.gallery} title={movie.title} />
 
       <AboutSection title={movie.title} description={movie.description} />

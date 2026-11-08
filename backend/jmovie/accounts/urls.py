@@ -13,6 +13,9 @@ from .views import (
     MovieUserStatusViewSet,
     SeriesUserStatusViewSet,
     EpisodeWatchStatusViewSet,
+    MyListsView,
+    MyListIdsView,
+    MyListToggleView,
 )
 
 
@@ -64,7 +67,14 @@ urlpatterns = [
     # Profile
     # ==========================
     path("profile/", UserProfileView.as_view(), name="user-profile"),
-    
+
+    # ==========================
+    # My Lists (علاقه‌مندی‌ها / لیست تماشا / دیده‌شده‌ها)
+    # ==========================
+    path("my-lists/", MyListsView.as_view(), name="my-lists"),
+    path("my-lists/ids/", MyListIdsView.as_view(), name="my-lists-ids"),
+    path("my-lists/toggle/", MyListToggleView.as_view(), name="my-lists-toggle"),
+
 
     # ==========================
     # API (ViewSets)
