@@ -36,7 +36,11 @@ const processQueue = (error, token = null) => {
 }
 
 api.interceptors.response.use(
-  res => res,
+  res => {
+    // هر تغییری روی سرور (ثبت کامنت، ویرایش پروفایل و…) کش خواندن را باطل می‌کند
+    if (res.config?.method && res.config.method !== 'get') getCache.clear()
+    return res
+  },
   err => {
     const originalRequest = err.config
 

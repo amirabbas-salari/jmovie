@@ -31,8 +31,8 @@ const suggestions = [
   },
 ]
 
-const AIChat = () => {
-  const [isOpen, setIsOpen] = useState(false)
+const AIChat = ({ initialOpen = false }) => {
+  const [isOpen, setIsOpen] = useState(initialOpen)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [conversationId, setConversationId] = useState(null)

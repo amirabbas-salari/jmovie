@@ -52,8 +52,26 @@ class MovieViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset()
         if self.action == "list":
             # سریالایزر لیست فقط ژانرها را لازم دارد؛ پریفچ عوامل و دانلودها
-            # در لیست فقط کوئری و حجم پاسخ را سنگین می‌کرد.
-            return qs.prefetch_related("genres").distinct()
+            # در لیست فقط کوئری و حجم پاسخ را سنگین می‌کرد. only() هم فقط
+            # ستون‌های لازم کارت را از دیتابیس می‌خواند.
+            return (
+                qs.only(
+                    "id",
+                    "title",
+                    "original_title",
+                    "year",
+                    "description",
+                    "runtime",
+                    "imdb_rating",
+                    "slug",
+                    "poster_url",
+                    "backdrop_url",
+                    "country",
+                    "release_date",
+                )
+                .prefetch_related("genres")
+                .distinct()
+            )
         return (
             qs
             .prefetch_related(

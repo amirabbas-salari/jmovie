@@ -25,10 +25,10 @@ function CommentCard({ comment }) {
       <div className="flex items-center gap-3">
         {avatar ? (
           <img
-            src={avatar || "/avatar.png"}
+            src={avatar || "/avatar.webp"}
             alt={username}
             className="h-9 w-9 flex-shrink-0 rounded-full object-cover"
-            onError={(e) => { e.target.src = "/avatar.png" }}
+            onError={(e) => { e.target.src = "/avatar.webp" }}
           />
         ) : (
           <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-[#751a6c] text-sm font-bold text-white">

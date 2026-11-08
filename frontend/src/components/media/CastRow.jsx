@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useNavigate } from 'react-router-dom';
 import { FiChevronRight, FiChevronLeft } from "react-icons/fi";
 import SectionTitle from "../ui/SectionTitle";
+import { profileImage } from "../../utils/image";
 
 const Avatar = ({ person }) => {
   const navigate = useNavigate();
@@ -65,7 +66,7 @@ const CastSection = ({
   };
 
   return (
-    <section dir="rtl">
+    <section dir="rtl" className="cv-auto">
 
       {/* هدر */}
       <div className="mb-4 flex items-center justify-between px-6 sm:px-10 lg:px-16">

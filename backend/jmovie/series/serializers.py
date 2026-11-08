@@ -8,6 +8,13 @@ from downloads.serializers import DownloadSerializer
 
 class SeriesListSerializer(serializers.ModelSerializer):
     genres = GenreMinimalSerializer(many=True)
+    # در لیست فقط چند خط اول توضیح نمایش داده می‌شود؛ متن کامل در دیتیل است.
+    description = serializers.SerializerMethodField()
+
+    def get_description(self, obj):
+        from movies.serializers import truncate_description
+
+        return truncate_description(obj.description)
 
     class Meta:
         model = Series
@@ -18,6 +25,7 @@ class SeriesListSerializer(serializers.ModelSerializer):
             "slug",
             # "poster",
             "poster_url",
+            "backdrop_url",
             "year",
             "imdb_rating",
             "genres",

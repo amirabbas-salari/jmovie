@@ -477,11 +477,15 @@ const PosterCard = ({
     `}
   >
     <img
-      src={
+      src={posterImage(
         movie.poster_url ||
         movie.backdrop_url
-      }
+      )}
       alt={movie.title}
+      loading="lazy"
+      decoding="async"
+      width={342}
+      height={513}
       className="w-full h-full object-cover"
     />
   </button>

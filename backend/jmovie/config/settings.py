@@ -135,7 +135,7 @@ REST_FRAMEWORK = {
         "comments": "3000/min",
     },
     
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'core.pagination.StandardResultsSetPagination',
     'PAGE_SIZE': 24,  # هر صفحه 20 آیتم 
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
@@ -191,6 +191,10 @@ REST_FRAMEWORK.update({
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.gzip.GZipMiddleware',
+    # ConditionalGet بعد از GZip در لیست است تا در مسیر برگشت، ETag روی
+    # بدنه‌ی خام (نه خروجی فشرده‌ی هر بار متفاوتِ gzip) محاسبه شود و
+    # درخواست‌های تکراری واقعاً 304 بگیرند.
+    'django.middleware.http.ConditionalGetMiddleware',
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     
@@ -254,7 +258,9 @@ import dj_database_url as _dj_database_url
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
     DATABASES = {
-        "default": _dj_database_url.parse(DATABASE_URL, conn_max_age=600),
+        "default": _dj_database_url.parse(
+            DATABASE_URL, conn_max_age=600, conn_health_checks=True
+        ),
     }
 else:
     _sqlite_path = os.getenv("SQLITE_PATH") or (
@@ -314,6 +320,9 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# فایل‌های استاتیک هش‌دار (خروجی collectstatic) عملاً تغییرناپذیرند؛
+# کش طولانی‌مدت مرورگر برایشان امن است.
+WHITENOISE_MAX_AGE = 60 * 60 * 24 * 365
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

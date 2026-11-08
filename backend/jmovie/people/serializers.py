@@ -21,6 +21,31 @@ class PersonImageSerializer(serializers.ModelSerializer):
         )
 
 
+class PersonListSerializer(serializers.ModelSerializer):
+    """سریالایزر سبک لیست/جستجو: فقط فیلدهای لازم برای نمایش کارت و آواتار.
+
+    قبلاً لیست افراد هم از PersonSerializer کامل استفاده می‌کرد؛ یعنی برای
+    هر فرد، بیوگرافی کامل + گالری + تا ۴۰ فیلمِ فیلموگرافی (با کوئری جدا)
+    برمی‌گشت — در صفحه‌ی اصلی با page_size=10 این یعنی صدها کوئری و یک
+    پاسخ چندصد کیلوبایتی برای نمایش چند آواتار کوچک.
+    """
+
+    display_image = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Person
+        fields = (
+            "id",
+            "tmdb_id",
+            "name",
+            "original_name",
+            "slug",
+            "profile_image_url",
+            "display_image",
+            "popularity",
+        )
+
+
 class PersonSerializer(serializers.ModelSerializer):
     # قبلاً "source" ست نشده بود؛ چون related_name واقعی روی مدل "images"
     # است نه "gallery"، به‌محض فعال شدن این فیلد (خارج کردن از کامنت) با
@@ -55,18 +80,18 @@ class PersonSerializer(serializers.ModelSerializer):
         )
 
     def get_movies(self, obj):
-        # چون یک بازیگر ممکن است بیش از یک نقش (رکورد MovieCast) در همان
-        # فیلم داشته باشد، قبلاً همان فیلم چندبار در خروجی تکرار می‌شد.
-        # با distinct روی movie_id این تکرار حذف می‌شود.
-        movie_ids = (
-            MovieCast.objects.filter(person=obj, role=MovieCast.ROLE_ACTOR)
-            .values_list("movie_id", flat=True)
+        # یک کوئری join به‌جای دو کوئری (ids + filter) و prefetch ژانرها تا
+        # سریالایزر لیست فیلم برای هر فیلم کوئری جدا نزند. distinct لازم
+        # است چون یک بازیگر ممکن است چند نقش در یک فیلم داشته باشد.
+        movies = (
+            Movie.objects.filter(
+                movie_cast__person=obj,
+                movie_cast__role=MovieCast.ROLE_ACTOR,
+            )
             .distinct()
+            .order_by("-release_date")
+            .prefetch_related("genres")[:MAX_FILMOGRAPHY_ITEMS]
         )
-
-        movies = Movie.objects.filter(id__in=movie_ids).order_by("-release_date")[
-            :MAX_FILMOGRAPHY_ITEMS
-        ]
 
         from movies.serializers import MovieListSerializer
         return MovieListSerializer(

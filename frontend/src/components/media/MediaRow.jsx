@@ -16,7 +16,7 @@ export default function MediaRow({ title, media = [], onSeeAll, type="media" }) 
   if (!media.length) return null;
 
   return (
-    <section dir="rtl" className="relative w-full py-6 text-white">
+    <section dir="rtl" className="cv-auto relative w-full py-6 text-white">
       {/* هدر */}
       <div className="mb-4 flex items-center justify-between px-4 sm:px-10 lg:px-16">
         <div className="flex items-center gap-3">

@@ -24,29 +24,36 @@ export default function SearchBar({ open, onClose }) {
     }
   }, [open]);
 
-  // واکشی نتایج با debounce
+  // واکشی نتایج با debounce؛ درخواست قبلی با تایپ جدید لغو می‌شود تا
+  // پاسخ دیررسیده‌ی کوئری قبلی روی نتایج جدید ننشیند و شبکه هدر نرود.
   useEffect(() => {
     if (!value.trim()) {
       setResults(EMPTY_RESULTS);
       return;
     }
+    const controller = new AbortController();
     const t = setTimeout(async () => {
       try {
         setLoading(true);
-        const { data } = await api.get("/search/", { params: { q: value } });
+        const { data } = await api.get("/search/", { params: { q: value }, signal: controller.signal });
         setResults({
           movies: data.movies ?? [],
           series: data.series ?? [],
           people: data.people ?? [],
         });
         setActiveIndex(-1);
-      } catch {
-        setResults(EMPTY_RESULTS);
+      } catch (err) {
+        if (err?.name !== "CanceledError" && err?.code !== "ERR_CANCELED") {
+          setResults(EMPTY_RESULTS);
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 300);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      controller.abort();
+    };
   }, [value]);
 
   // لیست تخت برای ناوبری با کیبورد
@@ -189,7 +196,7 @@ function Section({ title, icon: Icon, items, type, flatList, activeIndex, onPick
         {items.map((item) => {
           const path = pathOf(type, item);
           const isActive = flatList[activeIndex]?._path === path;
-          const img = item.profile_image_url || item.poster_url || "/default.png";
+          const img = item.profile_image_url || item.poster_url || "/avatar.webp";
           const label = item.name || item.original_title;
 
           return (
@@ -208,7 +215,9 @@ function Section({ title, icon: Icon, items, type, flatList, activeIndex, onPick
                 <img
                   src={img}
                   alt={label}
-                  onError={(e) => { e.target.src = "/avatar.png"; }}
+                  loading="lazy"
+                  decoding="async"
+                  onError={(e) => { e.target.src = "/avatar.webp"; }}
                   className={`w-9 h-12 object-cover shrink-0 ${
                     round ? "rounded-full w-10 h-10" : "rounded-md"
                   }`}
