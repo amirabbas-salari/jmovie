@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { backdropImage } from "../../utils/image";
+import { backdropImage, backdropSrcSet, posterImage } from "../../utils/image";
 
 // تبدیل دقیقه به فرمت "۱h ۳۰m"
 const formatRuntime = (min) => {

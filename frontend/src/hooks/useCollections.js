@@ -21,7 +21,7 @@ function mapCollection(raw) {
   };
 }
 
-export default function useCollections() {
+export default function useCollections({ withFeatured = true } = {}) {
   const [collections, setCollections] = useState([]);
   const [featuredCollection, setFeaturedCollection] = useState(null);
 

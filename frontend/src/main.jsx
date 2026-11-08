@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from "react"
+import React, { Component, Suspense, lazy, useEffect, useState } from "react"
 import ReactDOM from "react-dom/client"
 import { BrowserRouter } from "react-router-dom"
 import AppRoutes from "./routes/AppRoutes"
@@ -16,6 +16,44 @@ const PremiumCursor = lazy(() => import("./components/cursor/PremiumCursor"))
 const CursorTrail = lazy(() => import("./components/cursor/CursorTrail"))
 const CursorParticles = lazy(() => import("./components/cursor/CursorParticles"))
 const AIChat = lazy(() => import("./components/ai/AIChat"))
+
+// اگر هر جای اپ هنگام رندر کرش کند، به‌جای صفحه‌ی خالی یک پیام قابل‌فهم
+// با دکمه‌ی تلاش مجدد نشان داده می‌شود تا کاربر در صفحه‌ی سیاه نماند.
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  componentDidCatch(error, info) {
+    console.error("[ErrorBoundary]", error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div dir="rtl" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#1A0B0C] px-6 text-center text-white">
+          <p className="text-xl font-bold">مشکلی پیش آمد</p>
+          <p className="max-w-sm text-sm leading-7 text-white/60">
+            بارگذاری این صفحه با خطا مواجه شد. لطفاً دوباره تلاش کنید؛ اگر مشکل ادامه داشت، صفحه را رفرش کنید.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-full bg-gradient-to-r from-rose-500 to-[#751a6c] px-6 py-2.5 text-sm font-bold text-white transition hover:scale-[1.03] active:scale-95"
+          >
+            تلاش مجدد
+          </button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 function DesktopEffects() {
   const [enabled, setEnabled] = useState(false)
@@ -88,6 +126,7 @@ function LazyAIChat() {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(
+  <ErrorBoundary>
   <CursorProvider>
     <LazyAIChat />
     <DesktopEffects />
@@ -103,4 +142,5 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       </BrowserRouter>
     </React.StrictMode>
   </CursorProvider>
+  </ErrorBoundary>
 )

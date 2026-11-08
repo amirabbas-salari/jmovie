@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiStar } from "react-icons/fi";
-import { posterImage } from "../../utils/image";
+import { posterImage, posterSrcSet } from "../../utils/image";
 import { CardListButtons } from "./ListActions";
 
 /* ─────────────────────────────
