@@ -1,4 +1,6 @@
 from django.core.cache import cache
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 from django.db.models import Prefetch
 from drf_spectacular.utils import (
     OpenApiParameter,
@@ -47,9 +49,13 @@ class MovieViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-release_date"]
 
     def get_queryset(self):
+        qs = super().get_queryset()
+        if self.action == "list":
+            # سریالایزر لیست فقط ژانرها را لازم دارد؛ پریفچ عوامل و دانلودها
+            # در لیست فقط کوئری و حجم پاسخ را سنگین می‌کرد.
+            return qs.prefetch_related("genres").distinct()
         return (
-            super()
-            .get_queryset()
+            qs
             .prefetch_related(
                 "genres",
                 Prefetch(
@@ -82,7 +88,9 @@ class MovieViewSet(viewsets.ReadOnlyModelViewSet):
         ],
         responses={200: MovieListSerializer(many=True)},
     )
+    @method_decorator(cache_page(60 * 2))
     def list(self, request, *args, **kwargs):
+        # لیست عمومی است و داده‌ی کاربر-خاص ندارد؛ ۲ دقیقه کش سمت سرور
         return super().list(request, *args, **kwargs)
 
     @extend_schema(

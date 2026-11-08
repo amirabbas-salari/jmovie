@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FiStar, FiPlus, FiCheck } from "react-icons/fi";
+import { posterImage } from "../../utils/image";
 
 /* ─────────────────────────────
    شکل برش پوستر (200×300)
@@ -104,8 +105,7 @@ export default function MediaCard({
         group
         relative
         w-full
-        min-w-20
-        max-w-72
+        max-w-[148px]
         shrink-0
         cursor-pointer
         text-right
@@ -114,7 +114,7 @@ export default function MediaCard({
         duration-300
         hover:-translate-y-1
         focus-visible:-translate-y-1
-        sm:min-w-20
+        min-[420px]:max-w-[164px]
         sm:max-w-56
         md:min-w-40
         md:max-w-56
@@ -187,9 +187,10 @@ export default function MediaCard({
         "
       >
         <img
-          src={media.poster || media.poster_url}
+          src={posterImage(media.poster || media.poster_url)}
           alt={media.original_title}
           loading="lazy"
+          decoding="async"
           className="
             h-full
             w-full
@@ -262,8 +263,9 @@ export default function MediaCard({
             inset-x-0
             top-2
             z-20
-            p-3
-            pt-9
+            p-2
+            pt-8
+            sm:p-3
             transition-all
             duration-300
             sm:pt-12
@@ -275,15 +277,15 @@ export default function MediaCard({
             }
           `}
         >
-          <h2 className="mb-2 text-center text-base font-bold text-white sm:text-xl">
+          <h2 className="mb-1.5 text-center text-[13px] font-bold leading-5 text-white sm:mb-2 sm:text-xl sm:leading-normal">
             {media.title}
           </h2>
 
           <p
             className="
               line-clamp-3
-              text-[11px]
-              leading-6
+              text-[10px]
+              leading-5
               text-white/85
               sm:line-clamp-5
               sm:text-[15px]

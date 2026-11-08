@@ -11,7 +11,6 @@ import CollectionRow from "../components/collections/CollectionRow";
 function Home() {
   const navigate = useNavigate();
 
-  const [suggestion, setSuggestion] = useState([]);
   const [movies, setMovies] = useState([]);
   const [series, setSeries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,13 +32,11 @@ function Home() {
     Promise.all([
       api.get("/movies/?ordering=-release_date&page_size=10"),
       api.get("/series/?ordering=-release_date&page_size=10"),
-      api.get("/movies/?ordering=-imdb_rating&page_size=20"),
     ])
-      .then(([moviesRes, seriesRes, suggestionRes]) => {
+      .then(([moviesRes, seriesRes]) => {
         if (!mounted) return;
         setMovies(moviesRes.data.results ?? moviesRes.data ?? []);
         setSeries(seriesRes.data.results ?? seriesRes.data ?? []);
-        setSuggestion(suggestionRes.data.results ?? suggestionRes.data ?? []);
       })
       .catch((err) => console.error(err))
       .finally(() => mounted && setLoading(false));

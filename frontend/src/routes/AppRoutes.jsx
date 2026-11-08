@@ -1,42 +1,36 @@
+import { Suspense, lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Home from '../pages/Home'
 
-
-// import AuthPage from '../pages/AuthPage'
-import Register from '../pages/auth/Register'
-import Login from '../pages/auth/Login'
-import EditProfilePage from '../pages/auth/EditProfilePage'
-
-import NotFound from '../pages/NotFound'
 import ScrollToTop from '../components/ui/ScrollToTop'
 import ProtectedRoute from './ProtectedRoute'
 import MainLayout from '../layout/MainLayout'
 
-// movie
-import MovieDetails from '../pages/movies/MovieDetails'
-import MoviesPage from '../pages/movies/MoviesPage'
+// بقیه‌ی صفحات lazy لود می‌شوند تا باندل اولیه (صفحه خانه) سبک بماند و
+// کاربر کد صفحه‌هایی را که باز نکرده دانلود نکند.
+const Register = lazy(() => import('../pages/auth/Register'))
+const Login = lazy(() => import('../pages/auth/Login'))
+const EditProfilePage = lazy(() => import('../pages/auth/EditProfilePage'))
+const NotFound = lazy(() => import('../pages/NotFound'))
+const MovieDetails = lazy(() => import('../pages/movies/MovieDetails'))
+const MoviesPage = lazy(() => import('../pages/movies/MoviesPage'))
+const SeriesDetails = lazy(() => import('../pages/series/SeriesDetails'))
+const SeriesPage = lazy(() => import('../pages/series/SeriesPage'))
+const CollectionsPage = lazy(() => import('../pages/collections/CollectionsPage'))
+const CollectionDetail = lazy(() => import('../pages/collections/CollectionDetail'))
+const GenreDetailsPage = lazy(() => import('../pages/GenreDetailsPage'))
+const SupportPage = lazy(() => import('../pages/SupportPage'))
+const PrizePage = lazy(() => import('../pages/PrizePage'))
+const ActorDetailPage = lazy(() => import('../pages/ActorDetailPage'))
 
-// series
-import SeriesDetails from '../pages/series/SeriesDetails'
-import SeriesPage from '../pages/series/SeriesPage'
+const PageFallback = () => (
+  <div className="flex min-h-[50vh] items-center justify-center gap-3 text-sm text-zinc-400">
+    <span className="h-5 w-5 animate-spin rounded-full border-2 border-rose-500 border-t-transparent" />
+    در حال بارگذاری...
+  </div>
+)
 
-// collections
-import CollectionsPage from '../pages/collections/CollectionsPage'
-import CollectionDetail from '../pages/collections/CollectionDetail'
-
-// genres
-import GenreDetailsPage from '../pages/GenreDetailsPage'
-
-// support
-import SupportPage from '../pages/SupportPage'
-import PrizePage from '../pages/PrizePage'
-
-// actor detail
-import ActorDetailPage from '../pages/ActorDetailPage'
-
-// admin — همه‌ی صفحات پنل lazy هستند تا باندل اصلی سایت سنگین نشود
-// و پنل هم فقط وقتی باز می‌شود کد خودش را لود کند.
-import { lazy } from "react"
+// admin — صفحات پنل هم lazy هستند (همان lazy بالای فایل)
 import AdminRoute from "../admin/routes/AdminRoute"
 import AdminLayout from "../admin/layout/AdminLayout"
 import NotAuthorized from "../admin/pages/NotAuthorized"
@@ -63,6 +57,7 @@ function AppRoutes() {
   return (
     <>
     <ScrollToTop />
+    <Suspense fallback={<PageFallback />}>
     <Routes>
       <Route element={<MainLayout />}>
         <Route path="/" element={<Home />} />
@@ -139,6 +134,7 @@ function AppRoutes() {
         </Route>
       </Route>
     </Routes>
+    </Suspense>
     </>
   )
 }

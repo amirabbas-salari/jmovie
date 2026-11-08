@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { backdropImage } from "../../utils/image";
 
 // تبدیل دقیقه به فرمت "۱h ۳۰m"
 const formatRuntime = (min) => {
@@ -123,9 +124,11 @@ const HeroSection = ({
         `}
       >
         <img
-          src={bg}
+          src={backdropImage(bg)}
           alt={main.title}
           loading="eager"
+          fetchPriority="high"
+          decoding="async"
           className="
             h-full
             w-full
