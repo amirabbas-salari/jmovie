@@ -15,6 +15,8 @@ import Pagination from "../components/ui/Pagination";
 import SideImage from "../components/ui/SideImages";
 import api from "../services/api";
 import mapMedia from "../utils/mapMedia";
+import { useSeo } from "../seo/useSeo";
+import { breadcrumbJsonLd } from "../seo/jsonLd";
 
 const PAGE_SIZE = 20;
 
@@ -221,7 +223,21 @@ export default function GenreDetailsPage() {
   const genre =
     genreData?.genre;
 
-
+  useSeo({
+    title: genre
+      ? `دانلود فیلم و سریال ${genre.name} | مووی‌ورس`
+      : "ژانرها | مووی‌ورس",
+    description: genre
+      ? `دانلود و تماشای آنلاین بهترین فیلم‌ها و سریال‌های ژانر ${genre.name} با زیرنویس فارسی و کیفیت‌های متنوع در مووی‌ورس.`
+      : undefined,
+    path: genre ? `/genre/${genre.slug || slug}` : undefined,
+    jsonLd: genre
+      ? breadcrumbJsonLd([
+          { name: "خانه", path: "/" },
+          { name: `ژانر ${genre.name}`, path: `/genre/${genre.slug || slug}` },
+        ])
+      : undefined,
+  });
 
   return (
     <div

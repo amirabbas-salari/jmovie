@@ -29,7 +29,10 @@ function passwordStrength(pw) {
   return { score, label: labels[Math.min(score, 4)] }
 }
 
+import { useSeo } from "../../seo/useSeo";
+
 export default function EditProfilePage() {
+  useSeo({ title: "پروفایل من | مووی‌ورس", path: "/profile", noindex: true });
   const navigate = useNavigate()
   const { refreshUser } = useAuth()
   const [loading, setLoading] = useState(true)

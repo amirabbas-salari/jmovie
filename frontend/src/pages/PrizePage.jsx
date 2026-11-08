@@ -14,8 +14,16 @@ import {
 } from "lucide-react";
 
 import SideImage from "../components/ui/SideImages";
+import { useSeo } from "../seo/useSeo";
 
 export default function PrizePage() {
+  useSeo({
+    title: "حمایت از ما | مووی‌ورس",
+    description:
+      "مووی‌ورس رایگان است و با حمایت شما زنده می‌ماند؛ اگر از سایت راضی هستید، با هر مبلغی از ما حمایت کنید تا هزینه‌ی سرورها تأمین شود.",
+    path: "/pricing",
+  });
+
   const [copied, setCopied] = useState(false);
 
   const cardNumber = "6219861938917621";

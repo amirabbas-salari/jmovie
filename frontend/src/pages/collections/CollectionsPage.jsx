@@ -3,6 +3,8 @@ import useCollections from "../../hooks/useCollections";
 import SideImages from "../../components/ui/SideImages";
 import FeaturedCollection from "../../components/collections/FeaturedCollection";
 import CollectionGrid from "../../components/collections/CollectionGrid";
+import { useSeo } from "../../seo/useSeo";
+import { itemListJsonLd } from "../../seo/jsonLd";
 
 // مقادیر باید دقیقاً با نام فیلدهای واقعی مدل و کانوانسیون
 // OrderingFilter در DRF همخوانی داشته باشند (پیشوند "-" برای نزولی)
@@ -28,6 +30,23 @@ export default function CollectionsPage() {
     setPage,
     pagination,
   } = useCollections();
+
+  useSeo({
+    title: "کالکشن و مجموعه فیلم‌ها | مووی‌ورس",
+    description:
+      "بهترین کالکشن‌ها و مجموعه فیلم‌های سینمایی (فرنچایزها و سه‌گانه‌ها) برای دانلود و تماشای آنلاین با زیرنویس فارسی در مووی‌ورس.",
+    path: "/collection",
+    jsonLd: collections?.length
+      ? itemListJsonLd({
+          name: "کالکشن‌های مووی‌ورس",
+          items: collections.slice(0, 20).map((c) => ({
+            name: c.title || c.name,
+            path: `/collection/${c.slug}`,
+            image: c.cover || c.poster || c.image,
+          })),
+        })
+      : undefined,
+  });
 
   return (
     <div

@@ -13,11 +13,26 @@ import api from "../services/api";
 import MediaCard from "../components/media/MediaCard";
 import SideImage from "../components/ui/SideImages";
 import minions from '../assets/success_signup/minions.webp'
+import { useSeo } from "../seo/useSeo";
+import { personJsonLd } from "../seo/jsonLd";
 
 export default function ActorDetailPage() {
     const { slug } = useParams();
 
     const [actor, setActor] = useState(null);
+
+    useSeo({
+        title: actor
+            ? `${actor.name} | بیوگرافی و فیلم‌های ${actor.original_name || actor.name} در مووی‌ورس`
+            : "بازیگران | مووی‌ورس",
+        description: actor
+            ? `بیوگرافی ${actor.name} (${actor.original_name || ""}) و دانلود و تماشای آنلاین فیلم‌ها و سریال‌های او با زیرنویس فارسی در مووی‌ورس.`
+            : undefined,
+        path: `/person/${slug}`,
+        image: actor?.profile_image || actor?.profile_image_url,
+        type: "profile",
+        jsonLd: actor ? personJsonLd(actor) : undefined,
+    });
 
     const [loading, setLoading] = useState(true);
 

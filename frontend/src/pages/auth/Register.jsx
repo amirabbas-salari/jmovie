@@ -3,6 +3,7 @@ import { User, ArrowLeft, Image as ImageIcon } from "lucide-react";
 import { register } from "../../services/authService";
 import { useNavigate } from "react-router-dom";
 import SideImages from "../../components/ui/SideImages";
+import { useSeo } from "../../seo/useSeo";
 
 
 import for_login from "../../assets/for-login.webp";
@@ -19,6 +20,13 @@ import avatar9 from "../../assets/avatars/9.webp";
 
 
 function Register() {
+  useSeo({
+    title: "ثبت‌نام | مووی‌ورس",
+    description: "در مووی‌ورس رایگان ثبت‌نام کنید و لیست علاقه‌مندی‌ها و تماشای خود را بسازید.",
+    path: "/register",
+    noindex: true,
+  });
+
   const navigate = useNavigate();
   const [step, setStep] = useState("auth");
   const [loading, setLoading] = useState(false);

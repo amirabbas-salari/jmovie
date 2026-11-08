@@ -31,6 +31,7 @@ from rest_framework.permissions import IsAdminUser
 
 from accounts.views import ThrottledTokenObtainPairView
 from search.views import GlobalSearchView
+from .seo_views import robots_view, sitemap_view
 
 
 # from movies.views import AdminMovieViewSet
@@ -43,7 +44,11 @@ from search.views import GlobalSearchView
 
 urlpatterns = [
     # path('', include(router.urls)),
-    
+
+    # SEO: سایت‌مپ داینامیک همه‌ی فیلم‌ها/سریال‌ها و robots
+    path('sitemap.xml', sitemap_view, name='sitemap'),
+    path('robots.txt', robots_view, name='robots'),
+
     # admin panels
     path('django-admin/', admin.site.urls),
     path('admin/', include('adminAPI.urls')),

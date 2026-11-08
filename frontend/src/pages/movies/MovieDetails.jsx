@@ -11,11 +11,39 @@ import Gallery from "../../components/details/Gallery";
 import MediaRow from "../../components/media/MediaRow";
 import CommentsSection from "../../components/media/CommentsSection";
 import { normalize } from "../../utils/movie";
+import { useSeo } from "../../seo/useSeo";
+import { breadcrumbJsonLd, movieJsonLd } from "../../seo/jsonLd";
 
 const MovieDetails = () => {
   const navigate = useNavigate();
   const { slug } = useParams();
   const [movie, setMovie] = useState(null);
+
+  // سئو: تایتل/دیسکریپشن هدفمند برای «دانلود فیلم X» + داده‌ی ساخت‌یافته
+  useSeo({
+    title: movie
+      ? `دانلود فیلم ${movie.title} (${movie.original_title || ""} ${movie.year || ""}) با زیرنویس فارسی | مووی‌ورس`
+      : "دانلود فیلم | مووی‌ورس",
+    description: movie
+      ? `دانلود و تماشای آنلاین فیلم ${movie.title} (${movie.original_title || ""}) محصول ${movie.year || ""} با امتیاز ${movie.imdb_rating || "—"} در IMDb، زیرنویس فارسی و کیفیت‌های 480p تا 4K در مووی‌ورس. ${movie.description ? String(movie.description).slice(0, 110) : ""}`
+      : undefined,
+    keywords: movie
+      ? `دانلود فیلم ${movie.original_title}, دانلود فیلم ${movie.title}, ${movie.original_title} با زیرنویس فارسی, تماشای آنلاین ${movie.original_title}`
+      : undefined,
+    path: movie ? `/movie/${movie.slug}` : undefined,
+    image: movie?.backdrop_url || movie?.poster_url,
+    type: "video.movie",
+    jsonLd: movie
+      ? [
+          movieJsonLd(movie),
+          breadcrumbJsonLd([
+            { name: "خانه", path: "/" },
+            { name: "فیلم‌ها", path: "/movies" },
+            { name: movie.title, path: `/movie/${movie.slug}` },
+          ]),
+        ]
+      : undefined,
+  });
   const [suggestions, setSuggestions] = useState([]);
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);

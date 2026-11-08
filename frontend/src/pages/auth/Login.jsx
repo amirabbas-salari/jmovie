@@ -5,8 +5,16 @@ import { login } from "../../services/authService";
 import { saveTokens } from "../../utils/token";
 import { useAuth } from "../../context/AuthContext";
 import login_image from "../../assets/login-1.jpg";
+import { useSeo } from "../../seo/useSeo";
 
 function Login() {
+  useSeo({
+    title: "ورود به حساب کاربری | مووی‌ورس",
+    description: "وارد حساب مووی‌ورس شوید تا به لیست علاقه‌مندی‌ها و دانلودهای VIP دسترسی داشته باشید.",
+    path: "/login",
+    noindex: true,
+  });
+
   const navigate = useNavigate();
   const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
