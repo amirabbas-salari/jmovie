@@ -16,7 +16,7 @@ const navItems = [
   { path: "movies", label: "فیلم‌ها" },
   { path: "series", label: "سریال‌ها" },
   { path: "collection", label: "مجموعه‌ها" },
-  { path: "pricing", label: "اشتراک" },
+  { path: "pricing", label: "حمایت از ما" },
   { path: "faq", label: "سوالات متداول" },
 ];
 
@@ -69,8 +69,8 @@ export default function Header() {
                   to={`/${item.path}`}
                   className={({ isActive }) =>
                     isActive
-                      ? "text-[#27679f]"
-                      : "text-[#030A1F] hover:text-[#27679f] dark:text-white dark:hover:text-[#98b2ff]"
+                      ? "text-rose-500"
+                      : "text-[#030A1F] hover:text-rose-500 dark:text-white dark:hover:text-rose-400"
                   }
                 >
                   {item.label}
