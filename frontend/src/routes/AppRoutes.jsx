@@ -22,6 +22,7 @@ const GenreDetailsPage = lazy(() => import('../pages/GenreDetailsPage'))
 const SupportPage = lazy(() => import('../pages/SupportPage'))
 const PrizePage = lazy(() => import('../pages/PrizePage'))
 const ActorDetailPage = lazy(() => import('../pages/ActorDetailPage'))
+const MyListsPage = lazy(() => import('../pages/MyListsPage'))
 
 const PageFallback = () => (
   <div className="flex min-h-[50vh] items-center justify-center gap-3 text-sm text-zinc-400">
@@ -69,6 +70,7 @@ function AppRoutes() {
         <Route path="/support" element={<SupportPage />} />
         <Route path="/faq" element={<SupportPage />} />
         <Route path="/profile" element={<ProtectedRoute><EditProfilePage /></ProtectedRoute>} />
+        <Route path="/my-lists" element={<ProtectedRoute><MyListsPage /></ProtectedRoute>} />
         <Route path="/person/:slug" element={<ActorDetailPage />} />
         <Route path="/genre/:slug" element={<GenreDetailsPage />} />
         <Route path="/pricing" element={<PrizePage />} />

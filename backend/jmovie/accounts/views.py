@@ -1,7 +1,11 @@
-from rest_framework import viewsets, generics, permissions
-from rest_framework.exceptions import PermissionDenied
+from rest_framework import viewsets, generics, permissions, status
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
+from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
+from django.db.models import prefetch_related_objects
+from django.shortcuts import get_object_or_404
 
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiResponse
 
@@ -183,6 +187,153 @@ class UserListItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         user_list = self._get_owned_user_list()
         serializer.save(user_list=user_list)
+
+
+# ==========================
+# My Lists (علاقه‌مندی‌ها / لیست تماشا / دیده‌شده‌ها)
+# ==========================
+# این سه API روی همان مدل‌های MovieUserStatus/SeriesUserStatus ساخته
+# شده‌اند و چیزی است که فرانت‌اند واقعاً مصرف می‌کند:
+#   GET  /accounts/my-lists/        → آیتم‌های هر سه لیست با جزئیات مدیا
+#   GET  /accounts/my-lists/ids/    → فقط idها (برای تیک دکمه‌های کارت‌ها)
+#   POST /accounts/my-lists/toggle/ → افزودن/حذف یک آیتم از یک لیست
+
+LIST_STATUS_MAP = {
+    "favorite": MovieUserStatus.STATUS_FAVORITE,
+    "watchlist": MovieUserStatus.STATUS_WATCH_LATER,
+    "watched": MovieUserStatus.STATUS_WATCHED,
+}
+
+
+def _status_models(media_type):
+    from movies.models import Movie
+    from series.models import Series
+
+    if media_type == "movie":
+        return MovieUserStatus, Movie, "movie"
+    if media_type == "series":
+        return SeriesUserStatus, Series, "series"
+    raise ValidationError({"media_type": "نوع مدیا باید movie یا series باشد."})
+
+
+def _serialize_status_items(status_qs, media_field, serializer_cls):
+    """رکوردهای وضعیت را به [{media_type, added_at, media}] تبدیل می‌کند."""
+    items = list(status_qs)
+    media_objects = [getattr(item, media_field) for item in items]
+    if media_objects:
+        prefetch_related_objects(media_objects, "genres")
+    serialized = serializer_cls(media_objects, many=True).data
+    by_id = {media["id"]: media for media in serialized}
+    return [
+        {
+            "media_type": media_field,
+            "added_at": item.created_at,
+            "media": by_id.get(getattr(item, f"{media_field}_id")),
+        }
+        for item in items
+    ]
+
+
+class MyListsView(APIView):
+    """هر سه لیست کاربر با جزئیات کامل مدیا، جدیدترین اول."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from movies.serializers import MovieListSerializer
+        from series.serializers import SeriesListSerializer
+
+        result = {}
+        for list_name, status_value in LIST_STATUS_MAP.items():
+            movie_items = _serialize_status_items(
+                MovieUserStatus.objects.filter(
+                    user=request.user, status=status_value
+                )
+                .select_related("movie")
+                .order_by("-created_at"),
+                "movie",
+                MovieListSerializer,
+            )
+            series_items = _serialize_status_items(
+                SeriesUserStatus.objects.filter(
+                    user=request.user, status=status_value
+                )
+                .select_related("series")
+                .order_by("-created_at"),
+                "series",
+                SeriesListSerializer,
+            )
+            merged = movie_items + series_items
+            merged.sort(key=lambda x: x["added_at"], reverse=True)
+            result[list_name] = merged
+        return Response(result)
+
+
+class MyListIdsView(APIView):
+    """فقط idهای هر لیست؛ سبک، برای این‌که کارت‌ها بدانند تیک خورده‌اند یا نه."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        result = {}
+        for list_name, status_value in LIST_STATUS_MAP.items():
+            result[list_name] = {
+                "movie": list(
+                    MovieUserStatus.objects.filter(
+                        user=request.user, status=status_value
+                    ).values_list("movie_id", flat=True)
+                ),
+                "series": list(
+                    SeriesUserStatus.objects.filter(
+                        user=request.user, status=status_value
+                    ).values_list("series_id", flat=True)
+                ),
+            }
+        return Response(result)
+
+
+class MyListToggleView(APIView):
+    """افزودن/حذف یک فیلم یا سریال از یکی از لیست‌های کاربر (toggle)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        media_type = request.data.get("media_type")
+        list_name = request.data.get("list")
+        media_id = request.data.get("media_id")
+
+        if list_name not in LIST_STATUS_MAP:
+            raise ValidationError(
+                {"list": "لیست باید favorite، watchlist یا watched باشد."}
+            )
+        if media_id is None:
+            raise ValidationError({"media_id": "شناسه‌ی مدیا الزامی است."})
+
+        status_model, media_model, fk_field = _status_models(media_type)
+        media_obj = get_object_or_404(media_model, pk=media_id)
+        status_value = LIST_STATUS_MAP[list_name]
+
+        existing = status_model.objects.filter(
+            user=request.user, status=status_value, **{fk_field: media_obj}
+        ).first()
+        if existing is not None:
+            existing.delete()
+            active = False
+        else:
+            status_model.objects.create(
+                user=request.user, status=status_value, **{fk_field: media_obj}
+            )
+            active = True
+
+        return Response(
+            {
+                "media_type": media_type,
+                "media_id": media_obj.pk,
+                "list": list_name,
+                "active": active,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 # ==========================

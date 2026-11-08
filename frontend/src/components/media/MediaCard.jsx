@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiStar, FiPlus, FiCheck } from "react-icons/fi";
+import { FiStar } from "react-icons/fi";
 import { posterImage } from "../../utils/image";
+import { CardListButtons } from "./ListActions";
 
 /* ─────────────────────────────
    شکل برش پوستر (200×300)
@@ -45,8 +46,6 @@ function MediaCard({
   type = "movie",
 }) {
   const navigate = useNavigate();
-
-  const [saved, setSaved] = useState(false);
 
   // برای موبایل
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -123,53 +122,8 @@ function MediaCard({
         xl:min-w-[190px]
       "
     >
-      {/* دکمه علاقه‌مندی */}
-
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setSaved((s) => !s);
-        }}
-        aria-label={
-          saved
-            ? "حذف از لیست"
-            : "افزودن به لیست"
-        }
-        className={`
-          absolute
-          right-1.5
-          top-1.5
-          z-30
-          grid
-          h-8
-          w-8
-          place-items-center
-          rounded-full
-          border
-          text-white
-          shadow-[0_4px_14px_rgba(0,0,0,0.55)]
-          sm:backdrop-blur-md
-          transition-all
-          duration-300
-          hover:scale-110
-          hover:rotate-[360deg]
-          active:scale-90
-          sm:h-9
-          sm:w-9
-          ${
-            saved
-              ? "border-emerald-400/40 bg-emerald-600/30 text-emerald-300"
-              : "border-white/30 bg-white/5 hover:bg-white/10"
-          }
-        `}
-      >
-        {saved ? (
-          <FiCheck className="text-base sm:text-lg" />
-        ) : (
-          <FiPlus className="text-base sm:text-lg" />
-        )}
-      </button>
+      {/* دکمه‌های علاقه‌مندی / لیست تماشا (متصل به لیست‌های کاربر) */}
+      <CardListButtons mediaId={media.id} type={type} />
 
       {/* پوستر */}
 

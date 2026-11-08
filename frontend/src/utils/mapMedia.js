@@ -10,6 +10,5 @@ export default function mapMedia(raw) {
     rating: raw.rating ?? raw.vote_average,
     poster: raw.poster ?? raw.poster_url ?? raw.image,
     genres: raw.genres,
-    inWatchlist: raw.in_watchlist ?? false,
   };
 }

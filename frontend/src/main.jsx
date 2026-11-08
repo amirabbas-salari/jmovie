@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client"
 import { BrowserRouter } from "react-router-dom"
 import AppRoutes from "./routes/AppRoutes"
 import { AuthProvider } from "./context/AuthContext"
+import { MyListsProvider } from "./context/MyListsContext"
 import "./styles/global.css"
 import { ThemeProvider } from "./context/ThemeContext"
 import { CursorProvider } from "./context/CursorContext"
@@ -93,9 +94,11 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <React.StrictMode>
       <BrowserRouter>
         <AuthProvider>
-          <ThemeProvider>
-            <AppRoutes />
-          </ThemeProvider>
+          <MyListsProvider>
+            <ThemeProvider>
+              <AppRoutes />
+            </ThemeProvider>
+          </MyListsProvider>
         </AuthProvider>
       </BrowserRouter>
     </React.StrictMode>

@@ -12,7 +12,6 @@ export default function MediaPage({
   setFilters,
   error,
   loading,
-  onToggleWatchlist,
   page,
   setPage,
   pagination,
@@ -76,7 +75,6 @@ export default function MediaPage({
                 key={item.slug}
                 media={item}
                 type={type}
-                onToggleWatchlist={onToggleWatchlist}
               />
             ))}
 

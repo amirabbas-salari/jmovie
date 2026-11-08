@@ -183,7 +183,7 @@ export default function CollectionDetailPage() {
 
                     media={media}
 
-                    type="movie"
+                    type={media.media_type ?? "movie"}
 
                   />
 
