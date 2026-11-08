@@ -365,7 +365,7 @@ export default function AdvanceSearch({
 
                 <img
 
-                  src="/camera.png"
+                  src="/camera.webp"
 
                   alt="camera"
 

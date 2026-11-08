@@ -107,6 +107,8 @@ class Movie(TimeStampedModel):
             models.Index(fields=["imdb_id"]),
             models.Index(fields=["slug"]),
             models.Index(fields=["release_date"]),
+            # مرتب‌سازی «ترین‌های IMDb» و فیلتر امتیاز بدون اسکن کامل جدول
+            models.Index(fields=["-imdb_rating"]),
         ]
 
     def save(self, *args, **kwargs):

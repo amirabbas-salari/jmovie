@@ -35,10 +35,10 @@ export default function UserDropdown() {
       >
         {user ? (
           <img
-            src={user?.avatar ?? "/avatar.png"}
+            src={user?.avatar ?? "/avatar.webp"}
             alt={user?.username ?? "avatar"}
             className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover"
-            onError={(e) => { e.target.src = "/avatar.png" }}
+            onError={(e) => { e.target.src = "/avatar.webp" }}
           />
         ) : (
           <User className="w-6 h-6 sm:w-7 sm:h-7" />
@@ -55,10 +55,10 @@ export default function UserDropdown() {
             {/* هدر پروفایل */}
             <div className="flex flex-col items-center pb-4 border-b border-white/10">
               <img
-                src={user?.avatar ?? "/avatar.png"}
+                src={user?.avatar ?? "/avatar.webp"}
                 alt={user.username}
                 className="w-16 h-16 rounded-full object-cover ring-2 ring-blue-500/30 mb-3"
-                onError={(e) => { e.target.src = "/avatar.png" }}
+                onError={(e) => { e.target.src = "/avatar.webp" }}
               />
               <p className="font-semibold text-[#030A1F] dark:text-white">
                 {user.username}

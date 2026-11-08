@@ -131,6 +131,8 @@ class Series(TimeStampedModel):
             models.Index(fields=["imdb_id"]),
             models.Index(fields=["slug"]),
             models.Index(fields=["-imdb_rating"]),
+            # مرتب‌سازی پیش‌فرض لیست (-start_date) از این ایندکس می‌خواند
+            models.Index(fields=["-start_date"]),
         ]
 
     def save(self, *args, **kwargs):

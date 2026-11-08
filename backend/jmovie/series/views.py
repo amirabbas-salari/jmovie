@@ -51,7 +51,18 @@ class SeriesViewSet(viewsets.ReadOnlyModelViewSet):
         qs = super().get_queryset().prefetch_related("genres")
 
         if self.action == "list":
-            return qs
+            # فقط ستون‌های لازم کارت (year از start_date ساخته می‌شود)
+            return qs.only(
+                "id",
+                "title",
+                "original_title",
+                "slug",
+                "poster_url",
+                "backdrop_url",
+                "start_date",
+                "imdb_rating",
+                "description",
+            )
 
         return qs.prefetch_related(
             Prefetch(

@@ -13,10 +13,25 @@ class MovieGalleryImageSerializer(serializers.ModelSerializer):
         fields = ["id", "image","image_url", "caption", "order"]
 
 
+# توضیح کامل فیلم‌ها گاهی چند کیلوبایت است؛ در لیست/کارت فقط چند خط اول
+# نمایش داده می‌شود (line-clamp)، پس متن را سمت سرور کوتاه می‌کنیم تا حجم
+# پاسخ لیست‌ها چند برابر کمتر شود. متن کامل در دیتیل دست‌نخورده می‌ماند.
+LIST_DESCRIPTION_MAX_CHARS = 240
+
+
+def truncate_description(text):
+    text = (text or "").strip()
+    if len(text) <= LIST_DESCRIPTION_MAX_CHARS:
+        return text
+    return text[:LIST_DESCRIPTION_MAX_CHARS].rstrip() + "…"
+
+
 class MovieListSerializer(serializers.ModelSerializer):
     genres = GenreMinimalSerializer(many=True)
-    
-    filter
+    description = serializers.SerializerMethodField()
+
+    def get_description(self, obj):
+        return truncate_description(obj.description)
 
     class Meta:
         model = Movie

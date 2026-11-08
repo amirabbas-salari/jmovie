@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FiBookmark, FiThumbsUp, FiThumbsDown, FiPlay, FiEye } from "react-icons/fi";
+import { backdropImage, backdropSrcSet } from "../../utils/image";
 
 const IconButton = ({ active, onClick, label, children }) => (
   <button
@@ -41,10 +42,14 @@ export default function DetailsHero({ media }) {
       {/* Background */}
       <div className="absolute inset-0">
         <img
-          src={media.backdrop_url}
+          src={backdropImage(media.backdrop_url)}
+          srcSet={backdropSrcSet(media.backdrop_url)}
+          sizes="100vw"
           alt={media.original_title}
-          className="h-full w-full object-cover animate-ken-burns"
+          className="h-full w-full object-cover motion-safe:lg:animate-ken-burns"
           loading="eager"
+          fetchPriority="high"
+          decoding="async"
         />
 
       </div>

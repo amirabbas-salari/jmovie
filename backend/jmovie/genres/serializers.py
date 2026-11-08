@@ -2,6 +2,9 @@ from rest_framework import serializers
 from .models import Genre
 
 
+GENRE_MEDIA_LIMIT = 60
+
+
 
 
 

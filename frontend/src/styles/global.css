@@ -1,4 +1,6 @@
-@import "vazirmatn/Vazirmatn-font-face.css";
+/* فونت متغیر: یک فایل (~۱۰۹KB) به‌جای ۶ فایل وزن‌های جدا (~۳۰۰KB) که
+   قبلاً برای وزن‌های ۴۰۰ تا ۹۰۰ دانلود می‌شد. */
+@import "vazirmatn/Vazirmatn-Variable-font-face.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -97,6 +99,13 @@ h1, h2, h3 {
 
 }
 
+
+/* ردیف‌های زیرِ فولد لازم نیست در رندر اولیه نقاشی شوند؛ مرورگر تا
+   نزدیک‌شدن به ویوپورت رندرشان را عقب می‌اندازد و اسکرول سبک‌تر می‌شود. */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
+}
 
 /* ✅ راه‌حل با Tailwind */
 .some-class {

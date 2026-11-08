@@ -13,6 +13,10 @@ const API_PROXY = Object.fromEntries(
 
 export default defineConfig({
   plugins: [react(), svgr()],
+  build: {
+    // مرورگرهای مدرن؛ خروجی کوچک‌تر و سریع‌تر از target پیش‌فرضِ سازگار با قدیمی‌ها
+    target: "es2022",
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,

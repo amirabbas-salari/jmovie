@@ -40,7 +40,7 @@ const maskStyle = {
   maskRepeat: "no-repeat",
 };
 
-export default function MediaCard({
+function MediaCard({
   media,
   type = "movie",
 }) {
@@ -77,7 +77,7 @@ export default function MediaCard({
         text-[10px]
         font-medium
         text-white/90
-        backdrop-blur-md
+        sm:sm:backdrop-blur-md
         sm:px-3.5
         sm:py-1
         sm:text-xs
@@ -149,7 +149,7 @@ export default function MediaCard({
           border
           text-white
           shadow-[0_4px_14px_rgba(0,0,0,0.55)]
-          backdrop-blur-md
+          sm:backdrop-blur-md
           transition-all
           duration-300
           hover:scale-110
@@ -188,9 +188,13 @@ export default function MediaCard({
       >
         <img
           src={posterImage(media.poster || media.poster_url)}
+          srcSet={posterSrcSet(media.poster || media.poster_url)}
+          sizes="(max-width: 640px) 148px, 230px"
           alt={media.original_title}
           loading="lazy"
           decoding="async"
+          width={342}
+          height={513}
           className="
             h-full
             w-full
@@ -246,7 +250,7 @@ export default function MediaCard({
               text-amber-400
               ring-1
               ring-white/10
-              backdrop-blur-md
+              sm:backdrop-blur-md
               sm:text-xs
             "
           >
@@ -362,3 +366,6 @@ export default function MediaCard({
     </article>
   );
 }
+
+// رندر دوباره‌ی کارت‌ها با هر تغییر state والد جلوی اسکرول روان را می‌گرفت
+export default memo(MediaCard);

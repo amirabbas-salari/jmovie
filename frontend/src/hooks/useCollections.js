@@ -130,8 +130,9 @@ export default function useCollections() {
   ========================== */
 
   useEffect(() => {
-    fetchFeaturedCollection();
-  }, [fetchFeaturedCollection]);
+    // ردیف کالکشنِ صفحه‌ی اصلی featured نمی‌خواهد؛ آن درخواست سنگینِ جدا حذف شود
+    if (withFeatured) fetchFeaturedCollection();
+  }, [fetchFeaturedCollection, withFeatured]);
 
   /* ==========================
       Load Collections

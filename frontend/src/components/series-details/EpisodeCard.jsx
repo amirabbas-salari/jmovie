@@ -31,6 +31,8 @@ const EpisodeCard = ({ episode, selected, onClick }) => {
         <img
           src={image}
           alt={episode.title}
+          loading="lazy"
+          decoding="async"
           className="
             absolute
             inset-0

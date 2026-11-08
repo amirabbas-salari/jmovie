@@ -62,6 +62,8 @@ const rightPoster =
         {/* Background Blur */}
         <img
           src={backdrop}
+          loading="lazy"
+          decoding="async"
           alt=""
           className="
             absolute
@@ -80,6 +82,8 @@ const rightPoster =
         {/* Left Poster */}
         <img
           src={leftPoster}
+          loading="lazy"
+          decoding="async"
           alt=""
           className="
             absolute
@@ -101,6 +105,8 @@ const rightPoster =
 
         <img
           src={centerPoster}
+          loading="lazy"
+          decoding="async"
           alt={collection.title}
           className="
             relative
@@ -120,6 +126,8 @@ const rightPoster =
 
         <img
           src={rightPoster}
+          loading="lazy"
+          decoding="async"
           alt=""
           className="
             absolute
