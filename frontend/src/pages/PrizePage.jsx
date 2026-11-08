@@ -38,8 +38,9 @@ export default function PrizePage() {
     <div
       dir="rtl"
       className="
+      relative
       min-h-screen
-      overflow-hidden
+      overflow-x-clip
       bg-gradient-to-b
       from-black
       via-[#120809]
@@ -54,11 +55,11 @@ export default function PrizePage() {
 
       {/* Glow */}
 
-      <div className="pointer-events-none fixed -right-32 top-0 h-[420px] w-[420px] rounded-full bg-fuchsia-700/20 blur-[120px]" />
+      <div aria-hidden className="pointer-events-none absolute -right-24 top-0 h-64 w-64 rounded-full bg-fuchsia-700/20 blur-[100px] sm:-right-32 sm:h-[420px] sm:w-[420px] sm:blur-[120px]" />
 
-      <div className="pointer-events-none fixed -left-40 bottom-0 h-[450px] w-[450px] rounded-full bg-red-700/20 blur-[140px]" />
+      <div aria-hidden className="pointer-events-none absolute -left-24 bottom-0 h-64 w-64 rounded-full bg-red-700/20 blur-[100px] sm:-left-40 sm:h-[450px] sm:w-[450px] sm:blur-[140px]" />
 
-      <div className="mx-auto mt-24 max-w-7xl">
+      <div className="relative z-10 mx-auto mt-20 max-w-7xl sm:mt-24">
 
         {/* ================= Hero ================= */}
 
@@ -75,7 +76,7 @@ export default function PrizePage() {
         >
           <div className="absolute inset-0 bg-gradient-to-tr from-red-600/10 via-transparent to-fuchsia-600/10" />
 
-          <div className="relative z-10 p-8 md:p-14">
+          <div className="relative z-10 p-5 sm:p-8 md:p-14">
 
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-2 text-white/80">
 
@@ -94,8 +95,11 @@ export default function PrizePage() {
                   <div
                     className="
                     flex
-                    h-20
-                    w-20
+                    h-14
+                    w-14
+                    shrink-0
+                    sm:h-20
+                    sm:w-20
                     items-center
                     justify-center
                     rounded-full
@@ -113,11 +117,11 @@ export default function PrizePage() {
 
                   <div>
 
-                    <h1 className="text-4xl font-black text-white md:text-6xl">
+                    <h1 className="text-3xl font-black text-white sm:text-4xl md:text-6xl">
                       مووی<span className="text-rose-500">ورس</span>
                     </h1>
 
-                    <p className="mt-2 text-lg text-white/70">
+                    <p className="mt-2 text-base text-white/70 sm:text-lg">
                       همیشه رایگان، همیشه در کنار شما
                     </p>
 
@@ -142,21 +146,21 @@ export default function PrizePage() {
 
                 </p> */}
 
-                <div className="mt-8 flex flex-wrap gap-4">
+                <div className="mt-8 flex flex-wrap gap-2.5 sm:gap-4">
 
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-3 text-emerald-300">
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5 text-sm text-emerald-300 sm:px-5 sm:py-3 sm:text-base">
 
                     ✓ بدون اشتراک ماهانه
 
                   </div>
 
-                  <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-5 py-3 text-sky-300">
+                  <div className="rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-2.5 text-sm text-sky-300 sm:px-5 sm:py-3 sm:text-base">
 
                     ✓ دانلود رایگان
 
                   </div>
 
-                  <div className="rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/10 px-5 py-3 text-fuchsia-300">
+                  <div className="rounded-2xl border border-fuchsia-500/20 bg-fuchsia-500/10 px-4 py-2.5 text-sm text-fuchsia-300 sm:px-5 sm:py-3 sm:text-base">
 
                     ✓ بدون تبلیغات مزاحم
 
@@ -207,7 +211,7 @@ export default function PrizePage() {
 
           <div className="mb-8 text-center">
 
-            <h2 className="text-3xl font-black text-white">
+            <h2 className="text-2xl font-black text-white sm:text-3xl">
               چرا حمایت شما اهمیت دارد؟
             </h2>
 
@@ -226,8 +230,9 @@ export default function PrizePage() {
               border
               border-white/10
               bg-white/[0.05]
-              p-7
+              p-5
               backdrop-blur-xl
+              sm:p-7
               transition-all
               duration-300
               hover:-translate-y-2
@@ -272,8 +277,9 @@ export default function PrizePage() {
               border
               border-white/10
               bg-white/[0.05]
-              p-7
+              p-5
               backdrop-blur-xl
+              sm:p-7
               transition-all
               duration-300
               hover:-translate-y-2
@@ -316,8 +322,9 @@ export default function PrizePage() {
               border
               border-white/10
               bg-white/[0.05]
-              p-7
+              p-5
               backdrop-blur-xl
+              sm:p-7
               transition-all
               duration-300
               hover:-translate-y-2
@@ -360,8 +367,9 @@ export default function PrizePage() {
               border
               border-white/10
               bg-white/[0.05]
-              p-7
+              p-5
               backdrop-blur-xl
+              sm:p-7
               transition-all
               duration-300
               hover:-translate-y-2
@@ -417,8 +425,9 @@ export default function PrizePage() {
           bg-gradient-to-br
           from-white/[0.06]
           to-white/[0.03]
-          p-8
+          p-5
           backdrop-blur-xl
+          sm:p-8
         "
         >
 
@@ -433,7 +442,7 @@ export default function PrizePage() {
                   size={32}
                 />
 
-                <h2 className="text-3xl font-black text-white">
+                <h2 className="text-2xl font-black text-white sm:text-3xl">
                   مووی<span className="text-rose-500">ورس</span> همیشه رایگان خواهد ماند
                 </h2>
 
@@ -491,13 +500,14 @@ export default function PrizePage() {
               border
               border-white/10
               bg-white/[0.05]
-              p-8
+              p-5
               backdrop-blur-xl
+              sm:p-8
             "
           >
             <div className="mb-6 flex items-center gap-3">
 
-              <div className="rounded-2xl bg-pink-500/15 p-4 text-pink-400">
+              <div className="shrink-0 rounded-2xl bg-pink-500/15 p-3 text-pink-400 sm:p-4">
                 <Wallet size={30} />
               </div>
 
@@ -528,8 +538,11 @@ export default function PrizePage() {
               className="
                 mt-8
                 flex
-                h-16
+                min-h-[3.5rem]
                 w-full
+                px-4
+                py-3
+                text-center
                 items-center
                 justify-center
                 gap-3
@@ -561,14 +574,15 @@ export default function PrizePage() {
               border
               border-white/10
               bg-white/[0.05]
-              p-8
+              p-5
               backdrop-blur-xl
+              sm:p-8
             "
           >
 
             <div className="mb-6 flex items-center gap-3">
 
-              <div className="rounded-2xl bg-sky-500/15 p-4 text-sky-400">
+              <div className="shrink-0 rounded-2xl bg-sky-500/15 p-3 text-sky-400 sm:p-4">
                 <CreditCard size={30} />
               </div>
 
@@ -592,8 +606,9 @@ export default function PrizePage() {
                 border
                 border-white/10
                 bg-black/20
-                px-6
+                px-3
                 py-5
+                sm:px-6
               "
             >
 
@@ -601,7 +616,7 @@ export default function PrizePage() {
                 شماره کارت
               </p> */}
 
-              <p dir="ltr" className="text-center mt-3 select-all text-2xl font-black tracking-[4px] text-white">
+              <p dir="ltr" className="mt-3 select-all break-all text-center text-[15px] font-black tracking-[1px] text-white min-[420px]:text-lg sm:text-2xl sm:tracking-[4px]">
                 {cardNumber.replace(/(\d{4})/g, "$1 ").trim()}
               </p>
               
@@ -675,8 +690,9 @@ export default function PrizePage() {
             from-red-600/10
             via-fuchsia-600/10
             to-pink-600/10
-            p-10
+            p-6
             text-center
+            sm:p-10
             backdrop-blur-xl
           "
         >
@@ -705,7 +721,7 @@ export default function PrizePage() {
 
           </div>
 
-          <h2 className="text-4xl font-black text-white">
+          <h2 className="text-2xl font-black text-white sm:text-4xl">
             از همراهی شما سپاسگزاریم ❤️
           </h2>
 
