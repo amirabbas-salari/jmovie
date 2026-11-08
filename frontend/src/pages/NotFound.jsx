@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Clapperboard, Film, Home, Layers, Loader2, Popcorn, Search, Ticket, Tv } from "lucide-react"
 import api from "../services/api"
 
-// صفحه‌ی ۴۰۴ با تم سینمایی سایت: پس‌زمینه‌ی تیره‌ی برند (#1A0B0C)،
+// صفحه‌ی ۴۰۴ با تم سینمایی سایت: پس‌زمینه‌ی تیره‌ی برند (#08040d)،
 // قرمز برند، فونت وزیرمتن و حال‌وهوای «فیلم گمشده».
 const QUICK_LINKS = [
   { to: "/", label: "خانه", icon: Home },
@@ -68,7 +68,7 @@ export default function NotFound() {
   ]
 
   return (
-    <div dir="rtl" className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-b from-black via-[#140708] to-[#1A0B0C] px-4 py-16 font-sans text-zinc-100">
+    <div dir="rtl" className="relative flex min-h-screen items-center justify-center overflow-hidden bg-gradient-to-b from-black via-[#140708] to-[#08040d] px-4 py-16 font-sans text-zinc-100">
       {/* هاله‌های نور قرمز برند */}
       <div aria-hidden className="pointer-events-none absolute -top-32 right-1/4 h-96 w-96 rounded-full bg-red-700/20 blur-[120px]" />
       <div aria-hidden className="pointer-events-none absolute -bottom-40 left-1/4 h-96 w-96 rounded-full bg-rose-900/25 blur-[130px]" />

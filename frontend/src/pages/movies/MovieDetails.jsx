@@ -84,7 +84,7 @@ const MovieDetails = () => {
 
   if (loading)
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#1A0B0C]">
+      <div className="flex min-h-screen items-center justify-center bg-[#08040d]">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/10 border-t-rose-500" />
       </div>
     );
@@ -92,7 +92,7 @@ const MovieDetails = () => {
   if (!movie) return null;
 
   return (
-    <main className="bg-[#1A0B0C]">
+    <main className="bg-[#08040d]">
       <DetailsHero media={movie} mediaType="movie" />
       <Gallery images={movie.gallery} title={movie.title} />
 

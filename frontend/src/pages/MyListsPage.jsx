@@ -49,13 +49,25 @@ export default function MyListsPage() {
   const activeMeta = TABS.find((t) => t.key === activeTab)
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[#1A0B0C] px-4 pb-24 pt-28 text-white sm:px-8 lg:px-16">
+    <div dir="rtl" className="min-h-screen px-4 pb-24 pt-24 text-white sm:px-8 lg:px-16 lg:pt-32">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-8">
-          <h1 className="text-2xl font-black sm:text-4xl">لیست‌های من</h1>
-          <p className="mt-2 text-sm text-white/60">
-            فیلم‌ها و سریال‌هایی که ذخیره کرده‌اید، همه اینجاست.
+        <header className="glass relative mb-8 overflow-hidden rounded-[28px] px-5 py-7 sm:px-8 sm:py-9">
+          <div aria-hidden className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-fuchsia-600/20 blur-3xl" />
+          <div aria-hidden className="pointer-events-none absolute -right-16 -bottom-28 h-56 w-56 rounded-full bg-rose-600/20 blur-3xl" />
+          <p className="section-eyebrow relative mb-2">کتابخانه شخصی شما</p>
+          <h1 className="relative text-3xl font-black sm:text-5xl">
+            لیست‌های <span className="text-gradient">من</span>
+          </h1>
+          <p className="relative mt-3 max-w-xl text-sm leading-7 text-zinc-400">
+            فیلم‌ها و سریال‌هایی که ذخیره کرده‌اید، همه اینجاست؛ علاقه‌مندی‌ها، برنامه‌ی تماشا و آثاری که دیده‌اید.
           </p>
+          <div className="relative mt-5 flex flex-wrap gap-2">
+            {TABS.map(({ key, label }) => (
+              <span key={key} className="chip">
+                {label}: <b className="text-white">{counts[key] ?? 0}</b>
+              </span>
+            ))}
+          </div>
         </header>
 
         {/* تب‌ها */}
@@ -72,13 +84,13 @@ export default function MyListsPage() {
                   inline-flex items-center gap-2 rounded-full border px-4 py-2.5
                   text-sm font-semibold transition-all duration-300 active:scale-95
                   ${active
-                    ? "border-rose-500/60 bg-rose-600/25 text-white shadow-[0_8px_25px_rgba(225,29,72,0.25)]"
-                    : "border-white/15 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"}
+                    ? "border-transparent bg-brand-gradient text-white shadow-glow"
+                    : "border-white/[0.12] bg-white/[0.05] text-zinc-300 hover:border-white/25 hover:bg-white/[0.1] hover:text-white"}
                 `}
               >
                 <Icon className={active ? "fill-current" : ""} />
                 {label}
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${active ? "bg-rose-500 text-white" : "bg-white/10 text-white/60"}`}>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${active ? "bg-white/25 text-white" : "bg-white/10 text-zinc-400"}`}>
                   {counts[key] ?? 0}
                 </span>
               </button>
@@ -106,7 +118,7 @@ export default function MyListsPage() {
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Link
                 to="/movies"
-                className="rounded-full bg-gradient-to-r from-rose-500 to-[#751a6c] px-5 py-2.5 text-sm font-bold text-white transition hover:scale-[1.03] active:scale-95"
+                className="rounded-full bg-gradient-to-r from-rose-500 to-[#9333ea] px-5 py-2.5 text-sm font-bold text-white transition hover:scale-[1.03] active:scale-95"
               >
                 مرور فیلم‌ها
               </Link>

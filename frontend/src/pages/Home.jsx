@@ -65,17 +65,32 @@ function Home() {
 
   if (loading) {
     return (
-      <div
-        className="min-h-screen bg-[#1A0B0C] flex items-center justify-center text-white"
-        dir="rtl"
-      >
-        در حال بارگذاری...
+      <div className="min-h-screen px-4 pb-16 pt-24 sm:px-10 lg:px-16" dir="rtl" aria-label="در حال بارگذاری">
+        <div className="skeleton relative min-h-[62vh] overflow-hidden rounded-[28px]">
+          <div className="absolute bottom-8 right-6 left-6 space-y-4 sm:right-10">
+            <div className="h-5 w-32 rounded-full bg-white/15" />
+            <div className="h-12 max-w-xl rounded-2xl bg-white/15" />
+            <div className="h-4 max-w-md rounded-full bg-white/10" />
+            <div className="flex gap-3 pt-2">
+              <div className="h-11 w-36 rounded-full bg-rose-400/25" />
+              <div className="h-11 w-32 rounded-full bg-white/10" />
+            </div>
+          </div>
+        </div>
+        <div className="mt-10 grid grid-cols-3 gap-3 sm:grid-cols-5 sm:gap-4 lg:grid-cols-7">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="space-y-2">
+              <div className="skeleton aspect-[2/3]" />
+              <div className="mx-auto h-3 w-4/5 rounded-full bg-white/[0.08]" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#1A0B0C]" dir="rtl">
+    <div className="min-h-screen" dir="rtl">
       <HeroSection movies={heroItems} />
 
       <MediaRow

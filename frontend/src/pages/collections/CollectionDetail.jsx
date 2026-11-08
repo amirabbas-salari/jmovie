@@ -33,7 +33,7 @@ export default function CollectionDetailPage() {
           flex
           items-center
           justify-center
-          bg-[#1A0B0C]
+          bg-[#08040d]
           text-white
         "
       >
@@ -54,7 +54,7 @@ export default function CollectionDetailPage() {
           flex
           items-center
           justify-center
-          bg-[#1A0B0C]
+          bg-[#08040d]
           text-red-400
         "
       >
@@ -76,7 +76,7 @@ export default function CollectionDetailPage() {
         bg-gradient-to-b
         from-black
         via-[#120709]
-        to-[#1A0B0C]
+        to-[#08040d]
       "
     >
 

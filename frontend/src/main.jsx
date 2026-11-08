@@ -36,7 +36,7 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div dir="rtl" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#1A0B0C] px-6 text-center text-white">
+        <div dir="rtl" className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#08040d] px-6 text-center text-white">
           <p className="text-xl font-bold">مشکلی پیش آمد</p>
           <p className="max-w-sm text-sm leading-7 text-white/60">
             بارگذاری این صفحه با خطا مواجه شد. لطفاً دوباره تلاش کنید؛ اگر مشکل ادامه داشت، صفحه را رفرش کنید.
@@ -44,7 +44,7 @@ class ErrorBoundary extends Component {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="rounded-full bg-gradient-to-r from-rose-500 to-[#751a6c] px-6 py-2.5 text-sm font-bold text-white transition hover:scale-[1.03] active:scale-95"
+            className="rounded-full bg-gradient-to-r from-rose-500 to-[#9333ea] px-6 py-2.5 text-sm font-bold text-white transition hover:scale-[1.03] active:scale-95"
           >
             تلاش مجدد
           </button>
@@ -110,7 +110,7 @@ function LazyAIChat() {
             absolute -right-0.5 -top-0.5
             h-3.5 w-3.5
             rounded-full
-            border-2 border-[#1A0B0C]
+            border-2 border-[#08040d]
             bg-emerald-500
           "
         />

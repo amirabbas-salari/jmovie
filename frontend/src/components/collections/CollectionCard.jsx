@@ -40,13 +40,14 @@ const rightPoster =
         rounded-3xl
         border
         border-white/10
-        bg-white/[0.04]
+        bg-white/[0.045]
+        shadow-card
         backdrop-blur-xl
         transition-all
         duration-500
         hover:-translate-y-2
-        hover:border-fuchsia-500/30
-        hover:shadow-[0_25px_70px_rgba(180,0,60,.35)]
+        hover:border-rose-300/35
+        hover:shadow-glow
         cursor-pointer
         xl:w-[400px]
         md:min-w-72
@@ -168,7 +169,7 @@ const rightPoster =
               </div>
 
               <div className="mt-1 text-[11px] text-zinc-500">
-                فیلم
+                اثر
               </div>
 
             </div> 
@@ -265,6 +266,13 @@ const rightPoster =
           />
 
         </button> */}
+
+        <div className="flex items-center justify-between border-t border-white/[0.07] pt-4" dir="rtl">
+          <span className="text-sm font-bold text-zinc-100">مشاهده مجموعه</span>
+          <span className="icon-btn h-9 w-9 group-hover:border-rose-300/50 group-hover:bg-rose-500/20">
+            <ArrowLeft size={17} className="transition-transform duration-300 group-hover:-translate-x-0.5" />
+          </span>
+        </div>
 
       </div>
 

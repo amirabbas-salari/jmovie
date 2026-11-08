@@ -45,8 +45,8 @@ export function CardListButtons({ mediaId, type }) {
               shadow-[0_4px_14px_rgba(0,0,0,0.55)] transition-all duration-300
               hover:scale-110 active:scale-90 sm:h-9 sm:w-9
               ${active
-                ? activeClass
-                : "border-white/30 bg-black/35 hover:bg-black/55 sm:backdrop-blur-md"}
+                ? `${activeClass} shadow-glow-sm`
+                : "border-white/25 bg-black/45 hover:border-white/50 hover:bg-black/65 sm:backdrop-blur-md"}
             `}
           >
             <Icon className={`text-base sm:text-lg ${active ? "fill-current" : ""}`} />
@@ -77,8 +77,8 @@ export function DetailListActions({ mediaId, type, className = "" }) {
               text-xs font-semibold text-white transition-all duration-300
               hover:scale-[1.04] active:scale-95 sm:text-sm
               ${active
-                ? activeClass
-                : "border-white/25 bg-white/10 hover:bg-white/20 sm:backdrop-blur-md"}
+                ? `${activeClass} shadow-glow-sm`
+                : "border-white/20 bg-white/[0.08] hover:border-white/35 hover:bg-white/[0.15] sm:backdrop-blur-md"}
             `}
           >
             <Icon className={active ? "fill-current" : ""} />

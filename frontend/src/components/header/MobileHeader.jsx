@@ -24,20 +24,21 @@ export default function MobileHeader() {
     >
       <div
         className="
+        relative
         h-14
-        rounded-2xl
-        border border-white/20
-        bg-white/10
-        dark:bg-black/20
-        backdrop-blur-xl
-        shadow-lg
-        shadow-black/20
-        px-4
+        overflow-hidden
+        rounded-[20px]
+        border border-white/[0.13]
+        bg-[#140a1e]/85
+        backdrop-blur-2xl
+        shadow-glass
+        px-3
         flex
         items-center
         justify-between
         "
       >
+        <span className="absolute inset-x-8 top-0 h-px bg-gradient-to-l from-transparent via-rose-300/70 to-transparent" />
         <a href="/" className="flex items-center gap-2">
           <img
             src={theme === "dark" ? "/Logo-red.svg" : "/Logo-dark.svg"}
@@ -47,20 +48,22 @@ export default function MobileHeader() {
 
           <span className="font-black text-white text-xl">
             مووی
-            <span className="text-rose-500">ورس</span>
+            <span className="text-gradient">ورس</span>
           </span>
         </a>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
 
           <button
+            type="button"
             onClick={() => setSearchOpen((v) => !v)}
-            className="text-[#030A1F] dark:text-white"
+            aria-label={searchOpen ? "بستن جستجو" : "جستجو"}
+            className="icon-btn h-10 w-10"
           >
             {searchOpen ? (
-              <X className="w-7 h-7" />
+              <X className="h-5 w-5" />
             ) : (
-              <Search className="w-7 h-7" />
+              <Search className="h-5 w-5" />
             )}
           </button>
 

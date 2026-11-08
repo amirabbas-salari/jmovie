@@ -83,15 +83,15 @@ const SeriesDetails = () => {
 
   if (loading)
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#1A0B0C]">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/10 border-t-blue-500" />
+      <div className="flex min-h-screen items-center justify-center bg-[#08040d]">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-white/10 border-t-rose-500" />
       </div>
     );
 
   if (!series) return null;
 
   return (
-    <main className="bg-[#1A0B0C]">
+    <main className="bg-[#08040d]">
       <DetailsHero media={series} mediaType="series" />
       <Gallery images={series.gallery} title={series.title} />
 

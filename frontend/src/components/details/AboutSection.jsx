@@ -13,7 +13,7 @@ export default function AboutSection({ title = "", description = "" }) {
       <div className="mx-auto max-w-5xl">
         {/* خط تزئینی هماهنگ با هیرو */}
         <div className="mb-5 h-1 w-12 rounded-full bg-gradient-to-l
-          from-rose-500 to-[#751a6c] shadow-[0_0_12px_[#751a6c]]" />
+          from-rose-500 to-[#9333ea] shadow-[0_0_12px_[#9333ea]]" />
 
         <h2 className="mb-6 bg-gradient-to-l from-white to-white/40
           bg-clip-text text-3xl font-black tracking-tight

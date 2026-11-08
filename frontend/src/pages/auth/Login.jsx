@@ -45,7 +45,7 @@ function Login() {
 
   return (
     <div className="min-h-screen bg-[#1e0c0d] text-white">
-      <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_bottom_left,[#1A0B0C],transparent_28%),linear-gradient(90deg,#030b2f_0%,#020726_45%,#020726_100%)]">
+      <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_bottom_left,[#08040d],transparent_28%),linear-gradient(90deg,#030b2f_0%,#020726_45%,#020726_100%)]">
         <button
           type="button"
           onClick={() => window.history.back()}

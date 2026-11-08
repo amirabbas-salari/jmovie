@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useNavigate } from 'react-router-dom';
 import { FiChevronRight, FiChevronLeft } from "react-icons/fi";
-import SectionTitle from "../ui/SectionTitle";
+import SectionHeader from "../ui/SectionHeader";
 import { profileImage } from "../../utils/image";
 
 const Avatar = ({ person }) => {
@@ -20,25 +20,31 @@ const Avatar = ({ person }) => {
 
 
   return (
-    <div onClick={handleClick} className="flex w-24 shrink-0 flex-col items-center gap-2 text-center">
-      <div className="h-24 w-24 overflow-hidden rounded-full border-2 border-white/10 bg-white/5">
-        {person.profile_image || person.profile_image_url ? (
-          <img
-            src={person.profile_image || person.profile_image_url}
-            alt={person.name}
-            className="h-full w-full object-cover transition-transform duration-300 hover:scale-110"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-gray-500">
-            {person.name?.[0] ?? "?"}
-          </div>
-        )}
+    <div onClick={handleClick} className="group flex w-24 shrink-0 cursor-pointer flex-col items-center gap-2.5 text-center">
+      <div className="rounded-full bg-gradient-to-br from-rose-500 via-fuchsia-500 to-violet-600 p-[2px] shadow-glow-sm transition-transform duration-300 group-hover:-translate-y-1">
+        <div className="h-24 w-24 overflow-hidden rounded-full border-2 border-[#120818] bg-white/5">
+          {person.profile_image || person.profile_image_url ? (
+            <img
+              src={profileImage(person.profile_image || person.profile_image_url)}
+              alt={person.name}
+              loading="lazy"
+              decoding="async"
+              width={96}
+              height={96}
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-brand-soft text-2xl font-black text-rose-200">
+              {person.name?.[0] ?? "?"}
+            </div>
+          )}
+        </div>
       </div>
 
       <div>
-        <p className="text-sm font-bold text-white">{person.name}</p>
+        <p className="text-sm font-bold text-white transition-colors group-hover:text-rose-200">{person.name}</p>
         {person.character && (
-          <p className="text-xs text-gray-400">{person.character}</p>
+          <p className="mt-0.5 text-xs text-zinc-500">{person.character}</p>
         )}
       </div>
     </div>
@@ -68,26 +74,12 @@ const CastSection = ({
   return (
     <section dir="rtl" className="cv-auto">
 
-      {/* هدر */}
-      <div className="mb-4 flex items-center justify-between px-6 sm:px-10 lg:px-16">
-        <div className="flex items-center gap-3">
-          <span className="h-6 w-1 rounded-full bg-gradient-to-b
-            from-rose-500 to-[#751a6c] shadow-[0_0_10px_[#751a6c]]" />
-          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">{title}</h2>
-        </div>
-
-        {onSeeAll && (
-          <button
-            type="button"
-            onClick={onSeeAll}
-            className="flex items-center gap-1 text-sm text-white/60
-              transition-colors hover:text-white"
-          >
-            مشاهده همه
-            <FiChevronLeft className="text-base" />
-          </button>
-        )}
-      </div>
+      <SectionHeader
+        title={title}
+        eyebrow="چهره‌های محبوب"
+        onSeeAll={onSeeAll}
+        className="px-6 sm:px-10 lg:px-16"
+      />
 
 
       <div className="flex flex-col gap-6 md:flex-row md:items-start">
@@ -144,7 +136,7 @@ const CastSection = ({
         {/* کارگردان */}
         {director && (
           <div className="flex flex-shrink-0 flex-col items-center justify-center gap-2 rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md md:w-48">
-            <span className="text-xs font-medium text-blue-400">
+            <span className="text-xs font-medium text-rose-300">
               کارگردان
             </span>
 

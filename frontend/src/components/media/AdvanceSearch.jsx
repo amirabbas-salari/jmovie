@@ -163,7 +163,7 @@ export default function AdvanceSearch({
       text-white
       bg-gradient-to-r
       from-cyan-500
-      to-blue-600
+      to-violet-600
       "
 
         >
@@ -295,7 +295,7 @@ export default function AdvanceSearch({
         text-white
         bg-gradient-to-r
         from-cyan-500
-        to-blue-600
+        to-violet-600
         hover:scale-105
         duration-300
         "
@@ -765,7 +765,7 @@ export default function AdvanceSearch({
             text-white
             bg-gradient-to-r
             from-cyan-500
-            to-blue-600
+            to-violet-600
             hover:scale-105
             duration-300
             shadow-[0_0_30px_rgba(34,211,238,.25)]
@@ -1120,7 +1120,7 @@ font-bold
 text-white
 bg-gradient-to-r
 from-cyan-500
-to-blue-600
+to-violet-600
 "
 
                   >

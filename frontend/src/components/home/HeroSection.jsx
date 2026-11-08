@@ -1,6 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { backdropImage, backdropSrcSet, posterImage } from "../../utils/image";
+import { FiInfo, FiPlay } from "react-icons/fi";
+import { DetailListActions } from "../media/ListActions";
 
 // تبدیل دقیقه به فرمت "۱h ۳۰m"
 const formatRuntime = (min) => {
@@ -104,7 +106,7 @@ const HeroSection = ({
         min-h-screen
         lg:h-screen
         overflow-hidden
-        bg-[#1A0B0C]
+        bg-ink
         select-none
       "
     >
@@ -125,6 +127,8 @@ const HeroSection = ({
       >
         <img
           src={backdropImage(bg)}
+          srcSet={backdropSrcSet(bg)}
+          sizes="100vw"
           alt={main.title}
           loading="eager"
           fetchPriority="high"
@@ -133,13 +137,15 @@ const HeroSection = ({
             h-full
             w-full
             object-cover
-            animate-ken-burns
+            motion-safe:lg:animate-ken-burns
           "
         />
       </div>
 
-      <div className="absolute inset-0 bg-gradient-to-r from-[#1A0B0C] via-[#1A0B0C]/70 to-transparent" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#1A0B0C] via-transparent to-[#1A0B0C]/40" />
+      <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/70 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-ink/40" />
+      <div className="pointer-events-none absolute -left-24 top-1/3 h-80 w-80 rounded-full bg-fuchsia-600/15 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 right-[15%] h-64 w-64 rounded-full bg-rose-600/15 blur-3xl" />
 
       <div
         className="
@@ -185,14 +191,27 @@ const HeroSection = ({
             }
           `}
         >
+          <div dir="rtl" className="mb-5 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full bg-brand-gradient px-3.5 py-1.5 text-[11px] font-black text-white shadow-glow-sm sm:text-xs">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+              پیشنهاد امروز
+            </span>
+            <span className="chip">
+              {main.type === "series" ? "سریال" : "فیلم"}
+            </span>
+            {main.year && <span className="chip">{main.year}</span>}
+          </div>
+
           <h1
             className="
               text-white
               text-3xl
               sm:text-5xl
               lg:text-6xl
-              font-extrabold
+              font-black
               leading-tight
+              drop-shadow-2xl
+              [text-wrap:balance]
               mb-2
             "
           >
@@ -257,10 +276,10 @@ const HeroSection = ({
                 className="
                   group inline-flex items-center rounded-full
                   border border-white/10 bg-white/10
-                  px-3 py-1 text-[10px] text-blue-200
-                  transition-all duration-200
-                  hover:-translate-y-0.5 hover:border-blue-400/30
-                  hover:bg-blue-500/20 hover:text-white
+                  px-3 py-1 text-[10px] text-rose-100
+                  backdrop-blur-md transition-all duration-200
+                  hover:-translate-y-0.5 hover:border-rose-300/40
+                  hover:bg-rose-500/20 hover:text-white
                   sm:text-[11px]
                 "
               >
@@ -289,11 +308,11 @@ const HeroSection = ({
           )}
 
           {/* ACTIONS */}
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <button
               onClick={() =>
                 navigate(
-                  `/watch/${main.slug}`
+                  `/${main.type || "movie"}/${main.slug}`
                 )
               }
               // className="
@@ -304,7 +323,7 @@ const HeroSection = ({
               //   items-center
               //   gap-2
               //   bg-rose-500
-              //   hover:bg-[#751a6c]
+              //   hover:bg-[#9333ea]
               //   text-white
               //   px-6
               //   py-3
@@ -312,48 +331,28 @@ const HeroSection = ({
               //   transition
               // "
 
-              className="group relative flex flex-1 sm:flex-none items-center justify-center gap-2 overflow-hidden
-                rounded-2xl bg-gradient-to-r from-rose-500 to-[#751a6c]
-                px-5 py-3 sm:px-7 sm:py-3.5 text-sm sm:text-base font-bold text-white
-                shadow-[0_0_30px_[#1A0B0C]]
-                transition-all duration-300
-                hover:shadow-[0_0_50px_[]#1A0B0C]
-                hover:scale-[1.03] active:scale-95"
+              className="btn-brand group relative flex-1 overflow-hidden px-5 py-3 text-sm sm:flex-none sm:px-7 sm:py-3.5 sm:text-base"
             >
               <span className="absolute inset-0 -translate-x-full bg-gradient-to-r
                 from-transparent via-white/25 to-transparent
                 transition-transform duration-700 group-hover:translate-x-full" />
-              
-              تماشای فیلم
+              <FiPlay className="fill-current" />
+              تماشا و جزئیات
             </button>
 
             <button
               onClick={() =>
                 navigate(
-                  `/movie/${main.slug}`
+                  `/${main.type || "movie"}/${main.slug}`
                 )
               }
-              className="
-                w-full
-                sm:w-auto
-                flex
-                justify-center
-                items-center
-                gap-2
-                bg-white/10
-                hover:bg-white/20
-                border
-                border-white/10
-                text-white
-                px-6
-                py-3
-                rounded-full
-                transition
-              "
+              className="btn-ghost flex-1 px-6 py-3 text-sm sm:flex-none sm:text-base"
             >
-              ⓘ
+              <FiInfo />
               اطلاعات بیشتر
             </button>
+
+            <DetailListActions mediaId={main.id} type={main.type || "movie"} />
           </div>
         </div>
 
@@ -448,8 +447,8 @@ const HeroSection = ({
                 transition-all
                 ${
                   i === active
-                    ? "w-10 bg-rose-500"
-                    : "w-3 bg-white/30"
+                    ? "w-11 bg-brand-gradient shadow-glow-sm"
+                    : "w-3 bg-white/30 hover:bg-white/60"
                 }
               `}
             />

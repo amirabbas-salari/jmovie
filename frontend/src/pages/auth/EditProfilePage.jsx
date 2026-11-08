@@ -241,7 +241,7 @@ export default function EditProfilePage() {
   // ---------- رندر ----------
   if (loading) {
     return (
-      <div dir="rtl" className="min-h-screen bg-gradient-to-b from-black to-[#1A0B0C] px-4 pt-32 text-zinc-100">
+      <div dir="rtl" className="min-h-screen bg-gradient-to-b from-black to-[#08040d] px-4 pt-32 text-zinc-100">
         <div className="mx-auto max-w-6xl animate-pulse">
           <div className="mb-6 h-28 rounded-3xl bg-white/5" />
           <div className="grid grid-cols-1 gap-6 md:grid-cols-4">
@@ -255,7 +255,7 @@ export default function EditProfilePage() {
 
   if (loadError) {
     return (
-      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-gradient-to-b from-black to-[#1A0B0C] px-4 pt-24 text-zinc-100">
+      <div dir="rtl" className="flex min-h-screen items-center justify-center bg-gradient-to-b from-black to-[#08040d] px-4 pt-24 text-zinc-100">
         <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-white/[0.04] p-8 text-center">
           <p className="mb-5 text-sm text-zinc-300">{loadError}</p>
           <button onClick={() => window.location.reload()} className="rounded-xl bg-gradient-to-b from-[#C1121F] to-[#7F1D1D] px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-125">
@@ -269,7 +269,7 @@ export default function EditProfilePage() {
   const strength = passwordStrength(form.password)
 
   return (
-    <div dir="rtl" className="min-h-screen bg-gradient-to-b from-black to-[#1A0B0C] px-4 pb-40 pt-28 text-zinc-100 sm:pt-32">
+    <div dir="rtl" className="min-h-screen bg-gradient-to-b from-black to-[#08040d] px-4 pb-40 pt-28 text-zinc-100 sm:pt-32">
       {/* هاله‌ی نور برند */}
       <div aria-hidden className="pointer-events-none fixed -right-32 top-0 h-96 w-96 rounded-full bg-red-700/15 blur-[120px]" />
 

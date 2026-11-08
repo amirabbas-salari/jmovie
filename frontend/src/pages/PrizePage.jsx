@@ -44,7 +44,7 @@ export default function PrizePage() {
       bg-gradient-to-b
       from-black
       via-[#120809]
-      to-[#1A0B0C]
+      to-[#08040d]
       px-4
       py-14
       sm:px-6
