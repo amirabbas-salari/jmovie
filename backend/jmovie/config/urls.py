@@ -25,9 +25,11 @@ from drf_spectacular.views import (
     SpectacularRedocView    
 )
 from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
     TokenRefreshView,
 )
+from rest_framework.permissions import IsAdminUser
+
+from accounts.views import ThrottledTokenObtainPairView
 from search.views import GlobalSearchView
 
 
@@ -63,16 +65,17 @@ urlpatterns = [
     path("search/", GlobalSearchView.as_view(), name="global-search"),
 
     # token
-    path('api/token/', TokenObtainPairView.as_view()),
+    path('api/token/', ThrottledTokenObtainPairView.as_view()),
     path('api/token/refresh/', TokenRefreshView.as_view()),
-    
+
 
     # path('api/', include('core.urls')),
 
-    # swagger
-    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('swagger/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
+    # swagger — مستندات کامل API (نقشه‌ی همه‌ی endpointها) فقط برای
+    # ادمین‌های لاگین‌کرده؛ نمایش عمومی آن کار مهاجم را راحت می‌کند.
+    path('api/schema/', SpectacularAPIView.as_view(permission_classes=[IsAdminUser]), name='schema'),
+    path('swagger/', SpectacularSwaggerView.as_view(url_name='schema', permission_classes=[IsAdminUser]), name='swagger-ui'),
+    path('api/redoc/', SpectacularRedocView.as_view(url_name='schema', permission_classes=[IsAdminUser]), name='redoc'),
 
 ]
 

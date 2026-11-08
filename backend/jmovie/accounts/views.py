@@ -34,6 +34,21 @@ User = get_user_model()
 
 
 # ==========================
+# Auth - Login (JWT) با سقف تلاش
+# ==========================
+from rest_framework_simplejwt.views import TokenObtainPairView
+
+
+class ThrottledTokenObtainPairView(TokenObtainPairView):
+    """ویوی پیش‌فرض simplejwt هیچ سقف تلاشی ندارد؛ اینجا scope لاگین
+    (۱۵ تلاش در دقیقه به‌ازای هر IP — settings) رویش اعمال می‌شود تا
+    حدس‌زدن پسورد (brute-force/credential stuffing) عملاً ممکن نباشد."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
+
+
+# ==========================
 # Auth - Register
 # ==========================
 

@@ -108,7 +108,10 @@ def ensure_superuser_for_privilege_escalation(request, validated_data, instance=
     user = request.user
     if user.is_superuser:
         return
-    privileged_fields = {"is_staff", "is_superuser", "groups"}
+    # is_vip هم امتیاز مالی است (دسترسی به لینک‌های دانلود پولی)؛ اگر اینجا
+    # نباشد، هر ادمین عادیِ دارای مجوز ویرایش کاربر می‌تواند خودش را VIP
+    # کند و رایگان از همه‌ی دانلودها استفاده کند.
+    privileged_fields = {"is_staff", "is_superuser", "groups", "is_vip"}
     if privileged_fields & set(validated_data.keys()):
         raise PermissionDenied("تغییر سطح دسترسی فقط توسط سوپرادمین انجام می‌شود.")
     if instance is not None and instance.is_superuser:

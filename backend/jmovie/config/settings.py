@@ -44,11 +44,24 @@ AUTH_USER_MODEL = "accounts.User"
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-LOCAL-DEV-ONLY-change-me-in-production")  # در production حتماً از env ست شود؛ کلید قبلی داخل گیت لو رفته است
-
-# SECURITY WARNING: don't run with debug turned on in production!
 # DEBUG = True
 DEBUG = os.getenv("DEBUG", "False") == "True"
+
+# کلید پیش‌فرضِ شناخته‌شده فقط در حالت توسعه (DEBUG=True) مجاز است؛ در
+# production اگر SECRET_KEY از محیط ست نشده باشد عمداً خطا می‌دهیم، چون
+# اجرای سایت با کلید عمومی یعنی هرکسی می‌تواند توکن JWT و سشن ادمین جعل کند.
+# (کلیدهای قبلی داخل گیت لو رفته‌اند؛ حتماً یک کلید تازه بسازید و ست کنید.)
+from django.core.exceptions import ImproperlyConfigured
+
+_env_secret_key = os.getenv("SECRET_KEY")
+if _env_secret_key:
+    SECRET_KEY = _env_secret_key
+elif DEBUG:
+    SECRET_KEY = "django-insecure-LOCAL-DEV-ONLY-change-me-in-production"
+else:
+    raise ImproperlyConfigured(
+        "SECRET_KEY باید در محیط production از طریق متغیر محیطی ست شود."
+    )
 
 # هاست‌های مجاز با ALLOWED_HOSTS (کاما جدا) از محیط خوانده می‌شوند.
 # هشدار: اگر ست نشود برای جلوگیری از ازکارافتادن دیپلویمنت "*" می‌ماند؛
@@ -74,6 +87,7 @@ DJANGO_DEFAULT_APPS = [
 THIRD_PARTY_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'drf_spectacular',
     "django_filters",
     "corsheaders",
@@ -131,8 +145,14 @@ REST_FRAMEWORK = {
         # Scoped throttles
         "auth": "1000/min",
         'register': '50/hour',
-        'login': '100/min',
-        "comments": "3000/min",
+        # قبلاً login صد درخواست در دقیقه بود (عملاً brute-force آزاد روی
+        # پسوردها). ۱۵ تلاش در دقیقه به‌ازای هر IP برای ورود عادی کافی است.
+        'login': '15/min',
+        # ساخت کامنت (فقط روی POST اعمال می‌شود — views.Comments)
+        "comments": "60/hour",
+        # چت هوش مصنوعی برای مهمان هم باز است و به API پولی وصل می‌شود؛
+        # بدون سقف، هرکسی می‌توانست هزینه‌ی نامحدود روی دست سایت بگذارد.
+        "ai_chat": "60/hour",
     },
     
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.StandardResultsSetPagination',
@@ -149,6 +169,11 @@ SIMPLE_JWT = {
     # (قابل تنظیم با JWT_ACCESS_MINUTES) و refresh هفت‌روزه.
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv("JWT_ACCESS_MINUTES", "30"))),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "7"))),
+    # هر refresh، توکن تازه می‌دهد و قبلی را در blacklist می‌گذارد؛ یعنی
+    # refresh token دزدیده‌شده فقط تا اولین استفاده‌ی مالک واقعی کار می‌کند
+    # و بعد از آن هر دو طرف مجبور به ورود دوباره می‌شوند (قابل تشخیص است).
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
 }
 
 
@@ -343,4 +368,35 @@ NVIDIA_MODEL = os.getenv('NVIDIA_MODEL')
 
 # TMDB
 
-TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")  # کلید قبلی داخل گیت لو رفته؛ از env ست و rotate شود   
+TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")  # کلید قبلی داخل گیت لو رفته؛ از env ست و rotate شود
+
+
+# ---------------------------------------------------------------------------
+# Security headers / HTTPS (Django deployment checklist)
+# ---------------------------------------------------------------------------
+# پشت پراکسی Railway/Netlify، هدر X-Forwarded-Proto نشان می‌دهد درخواست
+# اصلی HTTPS بوده یا نه؛ بدون این، is_secure همیشه False می‌ماند.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+X_FRAME_OPTIONS = "DENY"                    # جلوگیری از clickjacking (نمایش در iframe)
+SECURE_CONTENT_TYPE_NOSNIFF = True          # جلوگیری از MIME-sniffing
+SECURE_REFERRER_POLICY = "same-origin"
+
+# کوکی‌های سشن/CSRF ادمین فقط روی HTTPS ارسال شوند (در توسعه‌ی لوکال نه).
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+
+# HSTS: بعد از اولین بازدید HTTPS، مرورگر تا یک سال دیگر HTTP را قبول
+# نمی‌کند. فقط وقتی واقعاً روی HTTPS هستید اثر دارد.
+SECURE_HSTS_SECONDS = 0 if DEBUG else 60 * 60 * 24 * 365
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+# ریدایرکت خودکار HTTP→HTTPS عمداً با متغیر محیطی کنترل می‌شود تا قبل از
+# اطمینان از درستی دامنه/گواهی، سایت در حلقه‌ی ریدایرکت نیفتد؛ روی سرور
+# production بعد از ست‌کردن دامنه، SECURE_SSL_REDIRECT=True بگذارید.
+SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "False") == "True"
+
+# سقف حجم آپلود (آواتار/پوستر) — جلوگیری از پر کردن دیسک با فایل غول‌پیکر.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024   

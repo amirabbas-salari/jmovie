@@ -1,14 +1,24 @@
+import logging
 from uuid import uuid4
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.throttling import ScopedRateThrottle
 
 from .models import AIConversation, AIMessage
 from .services.agent import JMovieAgent
 
+logger = logging.getLogger(__name__)
+
+MAX_MESSAGE_LENGTH = 2000
+
 
 class AIChatView(APIView):
+    # این endpoint برای مهمان هم باز است و به API پولی LLM وصل می‌شود؛
+    # سقف ساعتی (settings: ai_chat) جلوی سوءاستفاده‌ی هزینه‌ای را می‌گیرد.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "ai_chat"
 
     def post(self, request):
 
@@ -20,6 +30,14 @@ class AIChatView(APIView):
             return Response(
                 {
                     "detail": "Message is required."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(message) > MAX_MESSAGE_LENGTH:
+            return Response(
+                {
+                    "detail": f"Message must be at most {MAX_MESSAGE_LENGTH} characters."
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -187,11 +205,14 @@ class AIChatView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-        except Exception as exc:
+        except Exception:
+            # متن خام استثنا ممکن است جزئیات داخلی (آدرس سرویس، کلید،
+            # ساختار دیتابیس) را لو بدهد؛ فقط سمت سرور لاگ می‌شود و کاربر
+            # پیام عمومی می‌بیند.
+            logger.exception("AI chat failed")
             return Response(
                 {
                     "detail": "AI service is currently unavailable.",
-                    "error": str(exc),
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
