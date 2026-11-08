@@ -32,7 +32,7 @@ export default function CollectionsPage() {
   return (
     <div
       dir="rtl"
-      className="min-h-screen w-full overflow-x-hidden bg-gradient-to-b from-black to-[#1A0B0C] text-white pt-28"
+      className="min-h-screen w-full overflow-x-hidden bg-gradient-to-b from-black to-[#08040d] text-white pt-28"
     >
       {/* <SideImages /> */}
 
@@ -98,7 +98,7 @@ export default function CollectionsPage() {
                   <option
                     key={option.value}
                     value={option.value}
-                    className="bg-[#1A0B0C] text-white"
+                    className="bg-[#08040d] text-white"
                   >
                     {option.label}
                   </option>

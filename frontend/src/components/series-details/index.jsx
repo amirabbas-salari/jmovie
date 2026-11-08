@@ -27,13 +27,13 @@ const SeasonsSection = ({ seasons = [] }) => {
     return (
       <section
         dir="rtl"
-        className="rounded-3xl border border-rose-700/20 bg-[#1A0B0C] p-8"
+        className="rounded-3xl border border-rose-700/20 bg-[#08040d] p-8"
       >
         <h2 className="mb-6 text-2xl font-bold text-white">
           قسمت‌ها
         </h2>
 
-        <div className="rounded-2xl bg-[#1A0B0C] py-12 text-center text-zinc-400">
+        <div className="rounded-2xl bg-[#08040d] py-12 text-center text-zinc-400">
           هنوز قسمتی برای این سریال ثبت نشده است.
         </div>
       </section>

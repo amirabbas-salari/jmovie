@@ -231,7 +231,7 @@ export default function GenreDetailsPage() {
       bg-gradient-to-b
       from-black
       via-[#100708]
-      to-[#1A0B0C]
+      to-[#08040d]
       px-4
       pb-12
       sm:px-6

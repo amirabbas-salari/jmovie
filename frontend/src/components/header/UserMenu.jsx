@@ -57,7 +57,7 @@ export default function UserDropdown() {
               <img
                 src={user?.avatar ?? "/avatar.webp"}
                 alt={user.username}
-                className="w-16 h-16 rounded-full object-cover ring-2 ring-blue-500/30 mb-3"
+                className="w-16 h-16 rounded-full object-cover ring-2 ring-rose-400/40 mb-3"
                 onError={(e) => { e.target.src = "/avatar.webp" }}
               />
               <p className="font-semibold text-[#030A1F] dark:text-white">

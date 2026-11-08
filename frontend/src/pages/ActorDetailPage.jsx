@@ -47,7 +47,7 @@ export default function ActorDetailPage() {
         return (
             <div
                 dir="rtl"
-                className="min-h-screen bg-gradient-to-b from-black to-[#1A0B0C]"
+                className="min-h-screen bg-gradient-to-b from-black to-[#08040d]"
             >
 
                 <div className="mx-auto max-w-7xl px-5 py-28">
@@ -112,7 +112,7 @@ export default function ActorDetailPage() {
     return (
         <div
             dir="rtl"
-            className="min-h-screen overflow-hidden bg-gradient-to-b from-black via-[#140709] to-[#1A0B0C] pt-10 px-4"
+            className="min-h-screen overflow-hidden bg-gradient-to-b from-black via-[#140709] to-[#08040d] pt-10 px-4"
         >
             <SideImage showMinions={false} />
 

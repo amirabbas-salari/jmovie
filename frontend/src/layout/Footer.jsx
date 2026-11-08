@@ -75,9 +75,12 @@ export default function MainFooter() {
   return (
     <footer
       dir="rtl"
-      className="relative mt-0 overflow-x-hidden bg-inherit text-zinc-300"
+      className="relative mt-0 overflow-x-hidden border-t border-white/[0.08] bg-[#0a0510]/70 text-zinc-300"
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12 sm:py-14">
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-rose-400/70 to-transparent" />
+      <div aria-hidden className="pointer-events-none absolute -top-24 right-[12%] h-48 w-48 rounded-full bg-rose-600/10 blur-3xl" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-24 left-[8%] h-48 w-48 rounded-full bg-fuchsia-600/10 blur-3xl" />
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 py-12 sm:py-14">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-12">
           {/* ==================== برند ==================== */}
           <div className="lg:col-span-4">
@@ -88,11 +91,11 @@ export default function MainFooter() {
               <img
                 src="/Logo-red.svg"
                 alt="لوگو"
-                className="h-20 w-auto shrink-0 sm:h-24 lg:h-28"
+                className="h-14 w-auto shrink-0 sm:h-16"
               />
 
-              <span className="text-3xl font-extrabold text-white sm:text-4xl">
-                مووی<span className="text-rose-500">ورس</span>
+              <span className="text-3xl font-black text-white sm:text-4xl">
+                مووی<span className="text-gradient">ورس</span>
               </span>
             </Link>
 
@@ -107,7 +110,7 @@ export default function MainFooter() {
                 عضویت در خبرنامه
               </label>
 
-              <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 p-2 transition-colors focus-within:border-rose-500/60 sm:flex-row sm:items-center">
+              <div className="input-shell flex flex-col gap-2 p-2 sm:flex-row sm:items-center">
                 <input
                   type="email"
                   value={email}
@@ -118,7 +121,7 @@ export default function MainFooter() {
 
                 <button
                   type="submit"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-rose-500 sm:w-auto"
+                  className="btn-brand w-full rounded-xl px-4 py-2 text-sm sm:w-auto"
                 >
                   <Send size={16} />
                   <span>عضویت</span>
@@ -153,7 +156,8 @@ export default function MainFooter() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:col-span-8">
             {columns.map((col) => (
               <div key={col.title}>
-                <h3 className="mb-4 text-sm font-bold text-white">
+                <h3 className="mb-4 flex items-center gap-2 text-sm font-black text-white">
+                  <span className="h-4 w-1 rounded-full bg-brand-gradient" />
                   {col.title}
                 </h3>
 
@@ -181,7 +185,7 @@ export default function MainFooter() {
       </div>
 
       {/* ==================== پایین فوتر ==================== */}
-      <div className="border-t border-white/10 bg-[#1A0B0C]">
+      <div className="relative border-t border-white/[0.08] bg-black/25">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-5 text-center text-xs text-zinc-500 sm:flex-row sm:px-6 sm:text-right">
           <p>
             © {new Date().getFullYear()} مووی ورس — تمامی حقوق محفوظ است.

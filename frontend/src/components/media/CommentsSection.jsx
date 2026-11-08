@@ -31,7 +31,7 @@ function CommentCard({ comment }) {
             onError={(e) => { e.target.src = "/avatar.webp" }}
           />
         ) : (
-          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-[#751a6c] text-sm font-bold text-white">
+          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-rose-500 to-[#9333ea] text-sm font-bold text-white">
             {initial}
           </span>
         )}
@@ -80,13 +80,13 @@ export default function CommentsSection({ comments = [], mediaId }) {
       {/* سرتیتر */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span className="h-6 w-1 rounded-full bg-gradient-to-b from-rose-500 to-[#751a6c] shadow-[0_0_10px_[#751a6c]]" />
+          <span className="h-6 w-1 rounded-full bg-gradient-to-b from-rose-500 to-[#9333ea] shadow-[0_0_10px_[#9333ea]]" />
           <h2 className="text-xl font-bold tracking-tight sm:text-2xl">نظرات</h2>
         </div>
 
         <Link
           to={`/movies/${mediaId}/comments`}
-          className="flex items-center gap-2 text-sm font-semibold text-rose-500 transition hover:text-[#751a6c]"
+          className="flex items-center gap-2 text-sm font-semibold text-rose-500 transition hover:text-[#9333ea]"
         >
           مشاهده‌ی بیشتر
           <FiArrowLeft className="h-4 w-4" />

@@ -184,7 +184,7 @@ const AIChat = ({ initialOpen = false }) => {
             absolute -right-0.5 -top-0.5
             h-3.5 w-3.5
             rounded-full
-            border-2 border-[#1A0B0C]
+            border-2 border-[#08040d]
             bg-emerald-500
           "
         />

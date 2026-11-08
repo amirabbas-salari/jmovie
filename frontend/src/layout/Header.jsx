@@ -38,14 +38,18 @@ export default function Header() {
           <div
             className="
               absolute inset-0 -z-10
-              rounded-2xl
-              backdrop-blur-xl
-              bg-white/10
-              dark:bg-black/20
-              border border-white/20
-              shadow-lg shadow-black/20
+              overflow-hidden
+              rounded-[22px]
+              backdrop-blur-2xl
+              bg-[#140a1e]/80
+              border border-white/[0.13]
+              shadow-glass
             "
-          />
+          >
+            <span className="absolute inset-x-10 top-0 h-px bg-gradient-to-l from-transparent via-rose-300/70 to-transparent" />
+            <span className="absolute -left-16 top-0 h-full w-48 bg-fuchsia-500/10 blur-2xl" />
+            <span className="absolute -right-16 top-0 h-full w-48 bg-rose-500/10 blur-2xl" />
+          </div>
 
           <div className="flex items-center justify-between h-full px-6">
             {/* Logo */}
@@ -56,21 +60,19 @@ export default function Header() {
                 className="h-20 w-auto"
               />
 
-              <span className="text-2xl font-extrabold text-white">
-                مووی<span className="text-rose-500">ورس</span>
+              <span className="text-2xl font-black text-white">
+                مووی<span className="text-gradient">ورس</span>
               </span>
             </a>
 
             {/* Desktop Nav */}
-            <nav className="flex items-center gap-8 text-lg">
+            <nav className="flex items-center gap-1.5" aria-label="ناوبری اصلی">
               {navItems.map((item) => (
                 <NavLink
                   key={item.path}
                   to={`/${item.path}`}
                   className={({ isActive }) =>
-                    isActive
-                      ? "text-rose-500"
-                      : "text-[#030A1F] hover:text-rose-500 dark:text-white dark:hover:text-rose-400"
+                    `nav-pill ${isActive ? "nav-pill-active" : ""}`
                   }
                 >
                   {item.label}
@@ -79,22 +81,24 @@ export default function Header() {
             </nav>
 
             {/* Right */}
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-2.5">
               <button
+                type="button"
                 onClick={() => setSearchOpen((v) => !v)}
-                className="text-[#030A1F] dark:text-white"
+                aria-label={searchOpen ? "بستن جستجو" : "جستجو"}
+                className="icon-btn h-11 w-11"
               >
                 {searchOpen ? (
-                  <X className="w-7 h-7" />
+                  <X className="h-5 w-5" />
                 ) : (
-                  <Search className="w-7 h-7" />
+                  <Search className="h-5 w-5" />
                 )}
               </button>
 
-              <div className="relative">
-                <Bell className="w-7 h-7" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-pink-500" />
-              </div>
+              <button type="button" aria-label="اعلان‌ها" className="icon-btn relative h-11 w-11">
+                <Bell className="h-5 w-5" />
+                <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-rose-400 shadow-glow-sm" />
+              </button>
               {/* <ThemeToggle /> //TODO */}
               <UserMenu />
             </div>

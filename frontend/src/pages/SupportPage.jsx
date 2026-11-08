@@ -366,13 +366,13 @@ export default function SupportPage() {
   return (
     <div
       dir="rtl"
-      className="min-h-screen bg-gradient-to-b from-black to-[#1A0B0C] px-4 py-6 sm:px-6 sm:py-8 md:px-8"
+      className="min-h-screen bg-gradient-to-b from-black to-[#08040d] px-4 py-6 sm:px-6 sm:py-8 md:px-8"
     >
       <SideImage showOther={false} showMinions={false} />
 
       {/* هاله‌های نوری */}
       <div className="pointer-events-none fixed -right-20 -top-20 h-60 w-60 rounded-full bg-fuchsia-600/20 blur-3xl sm:-right-40 sm:-top-40 sm:h-96 sm:w-96" />
-      <div className="pointer-events-none fixed -left-20 top-20 h-60 w-60 rounded-full bg-blue-600/20 blur-3xl sm:-left-40 sm:top-40 sm:h-96 sm:w-96" />
+      <div className="pointer-events-none fixed -left-20 top-20 h-60 w-60 rounded-full bg-rose-600/[0.13] blur-3xl sm:-left-40 sm:top-40 sm:h-96 sm:w-96" />
 
       <div className="relative mx-auto mt-20 max-w-7xl sm:mt-24 md:mt-28">
         {/* Hero */}

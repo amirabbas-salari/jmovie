@@ -14,8 +14,8 @@ const IconButton = ({ active, onClick, label, children }) => (
       border backdrop-blur-md text-white/80 transition-all duration-300
       hover:scale-110 active:scale-95
       ${active
-        ? "border-white bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.4)]"
-        : "border-white/20 bg-white/10 hover:bg-white/20 hover:text-white hover:border-white/40"
+        ? "border-transparent bg-brand-gradient text-white shadow-glow-sm"
+        : "border-white/20 bg-black/35 hover:border-rose-300/50 hover:bg-rose-500/20 hover:text-white"
       }`}
   >
     <span className="text-base sm:text-lg transition-transform duration-300 group-hover:scale-110">
@@ -61,7 +61,8 @@ export default function DetailsHero({ media, mediaType = "movie" }) {
       {/* Overlays */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/35 to-transparent" />
       <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/10 to-transparent" />
-      <div className="pointer-events-none absolute inset-0 shadow-[inset_0_-80px_120px_[#1A0B0C]]" />
+      <div className="pointer-events-none absolute inset-0 shadow-[inset_0_-90px_130px_#08040d]" />
+      <div className="pointer-events-none absolute -left-20 bottom-10 h-64 w-64 rounded-full bg-fuchsia-600/15 blur-3xl" />
 
       {/* Content */}
       <div className="relative z-10 mx-auto flex h-full max-w-6xl flex-col
@@ -70,8 +71,7 @@ export default function DetailsHero({ media, mediaType = "movie" }) {
 
         {/* عنوان + متادیتا */}
         <div className="max-w-xl space-y-3 sm:space-y-4">
-          <div className="h-1 w-10 sm:w-12 rounded-full bg-gradient-to-r from-rose-500 to-[#751a6c]
-            shadow-[0_0_12px_[#1A0B0C]]" />
+          <div className="h-1.5 w-12 rounded-full bg-brand-gradient shadow-glow-sm sm:w-16" />
 
           <h1 className="text-2xl font-black leading-tight tracking-tight
             drop-shadow-2xl sm:text-5xl lg:text-6xl">
@@ -138,13 +138,7 @@ export default function DetailsHero({ media, mediaType = "movie" }) {
           <div className="order-1 flex items-center gap-2.5 sm:order-2 sm:ms-auto sm:gap-3">
             <button
               type="button"
-              className="group relative flex flex-1 sm:flex-none items-center justify-center gap-2 overflow-hidden
-                rounded-2xl bg-gradient-to-r from-rose-500 to-[#751a6c]
-                px-5 py-3 sm:px-7 sm:py-3.5 text-sm sm:text-base font-bold text-white
-                shadow-[0_0_30px_[#1A0B0C]]
-                transition-all duration-300
-                hover:shadow-[0_0_50px_[]#1A0B0C]
-                hover:scale-[1.03] active:scale-95"
+              className="btn-brand group relative flex-1 overflow-hidden px-5 py-3 text-sm sm:flex-none sm:px-7 sm:py-3.5 sm:text-base"
             >
               <span className="absolute inset-0 -translate-x-full bg-gradient-to-r
                 from-transparent via-white/25 to-transparent

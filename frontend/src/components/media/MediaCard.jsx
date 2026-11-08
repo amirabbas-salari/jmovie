@@ -69,14 +69,14 @@ function MediaCard({
       className="
         rounded-full
         border
-        border-white/20
-        bg-white/10
+        border-rose-200/25
+        bg-rose-500/[0.16]
         px-2.5
         py-0.5
         text-[10px]
         font-medium
-        text-white/90
-        sm:sm:backdrop-blur-md
+        text-rose-50
+        sm:backdrop-blur-md
         sm:px-3.5
         sm:py-1
         sm:text-xs
@@ -107,12 +107,16 @@ function MediaCard({
         max-w-[148px]
         shrink-0
         cursor-pointer
+        snap-start
+        rounded-[22px]
         text-right
         outline-none
-        transition-transform
+        transition-all
         duration-300
-        hover:-translate-y-1
-        focus-visible:-translate-y-1
+        hover:-translate-y-1.5
+        focus-visible:-translate-y-1.5
+        focus-visible:ring-2
+        focus-visible:ring-rose-400/80
         min-[420px]:max-w-[164px]
         sm:max-w-56
         md:min-w-40
@@ -134,10 +138,14 @@ function MediaCard({
           relative
           aspect-[2/3]
           overflow-hidden
-          bg-zinc-900
-          transition-[filter]
-          duration-300
-          group-hover:drop-shadow-[0_10px_30px_rgba(225,29,72,0.4)]
+          bg-surface
+          shadow-card
+          ring-1
+          ring-white/[0.13]
+          transition-all
+          duration-500
+          group-hover:shadow-glow
+          group-hover:ring-rose-300/40
         "
       >
         <img
@@ -160,9 +168,14 @@ function MediaCard({
           "
         />
 
-        {/* گرادینت */}
+        {/* گرادینت و برق لبه‌ی پوستر */}
 
-        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/45 via-transparent to-black/70" />
+        <div className="pointer-events-none absolute inset-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-40px_60px_rgba(0,0,0,0.35)]" />
+        <span className="absolute bottom-2 right-2 z-20 rounded-full border border-white/15 bg-black/45 px-2 py-0.5 text-[10px] font-semibold text-zinc-200 backdrop-blur-sm">
+          {type === "series" ? "سریال" : "فیلم"}
+          {media.year ? ` • ${media.year}` : ""}
+        </span>
 
         <div
           className={`
@@ -280,23 +293,14 @@ function MediaCard({
       {/* اطلاعات پایین کارت */}
 
 
-        <h3
-          dir="ltr"
-          className="
-            text-center 
-            mt-2.5
-            truncate
-            text-xs
-            font-semibold
-            text-white/90
-            transition-colors
-            group-hover:text-white
-            sm:text-sm
-          "
-          >
-          {media.original_title}
-          {media.year && type=="movie" && <span> {media.year}</span>}
-        </h3>
+        <div className="px-1 pt-3">
+          <h3 className="truncate text-right text-[13px] font-bold leading-6 text-zinc-50 transition-colors group-hover:text-rose-100 sm:text-sm">
+            {media.title || media.original_title}
+          </h3>
+          <p dir="ltr" className="truncate text-left text-[11px] font-medium text-zinc-500 transition-colors group-hover:text-zinc-400">
+            {media.original_title}
+          </p>
+        </div>
 
       {/* لایه مخصوص موبایل */}
 

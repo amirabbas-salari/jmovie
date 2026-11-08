@@ -1,114 +1,153 @@
-/* فونت متغیر: یک فایل (~۱۰۹KB) به‌جای ۶ فایل وزن‌های جدا (~۳۰۰KB) که
-   قبلاً برای وزن‌های ۴۰۰ تا ۹۰۰ دانلود می‌شد. */
+/* فونت متغیر: یک فایل (~۱۰۹KB) به‌جای ۶ فایل وزن‌های جدا (~۳۰۰KB) */
 @import "vazirmatn/Vazirmatn-Variable-font-face.css";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --ink: #08040d;
+  --night: #0d0714;
+  --brand: #f43f5e;
+  --brand-2: #9333ea;
+  color-scheme: dark;
+}
+
 * {
-  margin: 0;
-  padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  @apply bg-gray-900 text-gray-100;
+  @apply text-zinc-100 antialiased;
   font-family: "Vazirmatn", system-ui, sans-serif;
   direction: rtl;
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 480px at 85% -5%, rgba(147, 51, 234, 0.16), transparent 60%),
+    radial-gradient(820px 460px at 8% 0%, rgba(225, 29, 72, 0.14), transparent 55%),
+    linear-gradient(180deg, #08040d 0%, #0d0714 42%, #08040d 100%);
+  background-attachment: fixed;
 }
 
 h1, h2, h3 {
   font-family: "Vazirmatn", system-ui, sans-serif;
+  letter-spacing: -0.01em;
 }
 
+::selection {
+  background: rgba(244, 63, 94, 0.85);
+  color: #fff;
+}
 
-.scrollbar-hide::-webkit-scrollbar {
+:focus-visible {
+  outline: 2px solid rgba(251, 113, 133, 0.9);
+  outline-offset: 3px;
+}
+
+/* ---------- کامپوننت‌های مشترک طراحی ---------- */
+@layer components {
+  .glass {
+    @apply border border-white/10 bg-white/[0.055] shadow-glass backdrop-blur-xl;
+  }
+
+  .glass-strong {
+    @apply border border-white/[0.13] bg-[#150b20]/85 shadow-glass backdrop-blur-2xl;
+  }
+
+  .text-gradient {
+    @apply bg-brand-gradient bg-clip-text text-transparent;
+  }
+
+  .btn-brand {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-brand-gradient font-bold text-white shadow-glow transition-all duration-300 hover:scale-[1.03] hover:brightness-110 active:scale-95 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.06] font-semibold text-white backdrop-blur-md transition-all duration-300 hover:border-white/30 hover:bg-white/[0.12] active:scale-95 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .icon-btn {
+    @apply grid shrink-0 place-items-center rounded-full border border-white/[0.12] bg-white/[0.06] text-zinc-200 shadow-sm backdrop-blur-md transition-all duration-300 hover:border-rose-300/40 hover:bg-rose-500/15 hover:text-white active:scale-90;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-black/35 px-3 py-1 text-[11px] font-medium text-zinc-200 backdrop-blur-md;
+  }
+
+  .nav-pill {
+    @apply rounded-full px-3.5 py-2 text-[15px] font-medium text-zinc-300 transition-all duration-300 hover:bg-white/[0.07] hover:text-white;
+  }
+
+  .nav-pill-active {
+    @apply bg-brand-gradient text-white shadow-glow-sm hover:bg-brand-gradient hover:text-white;
+  }
+
+  .section-eyebrow {
+    @apply text-[11px] font-bold tracking-wide text-rose-300/90;
+  }
+
+  .input-shell {
+    @apply rounded-2xl border border-white/10 bg-white/[0.05] transition-all duration-300 focus-within:border-rose-400/60 focus-within:bg-white/[0.08] focus-within:shadow-glow-sm;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-2xl bg-white/[0.07];
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
   display: none;
 }
 
-.scrollbar-hide {
+.scrollbar-hide,
+.no-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-
-
-/* =====================================================
-   Premium Scrollbar
-===================================================== */
-
-/* Chrome / Edge / Brave / Opera */
-
+/* ---------- اسکرول‌بار ---------- */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #090909;
+  background: #0a0611;
 }
 
 ::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  border: 2px solid #090909;
-
-  background: linear-gradient(
-    180deg,
-    #991B1B 0%,
-    #BE123C 45%,
-    #7F1D1D 100%
-  );
-
-  transition: all .3s ease;
+  border: 2px solid #0a0611;
+  background: linear-gradient(180deg, #e11d48, #9333ea);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-
-  background: linear-gradient(
-    180deg,
-    #BE123C,
-    #E11D48,
-    #991B1B
-  );
-
+  background: linear-gradient(180deg, #fb7185, #c084fc);
 }
 
-::-webkit-scrollbar-corner{
-  background:#090909;
-}
-
-
-/* Firefox */
-
-*{
-
+* {
   scrollbar-width: thin;
-
-  scrollbar-color:#BE123C #090909;
-
+  scrollbar-color: #be123c #0a0611;
 }
 
-
-::-webkit-scrollbar-track{
-
-    background:
-        linear-gradient(
-            rgba(255,255,255,.03),
-            rgba(255,255,255,.01)
-        );
-
-}
-
-
-/* ردیف‌های زیرِ فولد لازم نیست در رندر اولیه نقاشی شوند؛ مرورگر تا
-   نزدیک‌شدن به ویوپورت رندرشان را عقب می‌اندازد و اسکرول سبک‌تر می‌شود. */
+/* ردیف‌های زیرِ فولد در رندر اولیه نقاشی نمی‌شوند */
 .cv-auto {
   content-visibility: auto;
   contain-intrinsic-size: auto 360px;
 }
 
-/* ✅ راه‌حل با Tailwind */
-.some-class {
-  @apply bg-gradient-to-b from-[#C1121F] via-[#9D174D] to-[#7F1D1D];
-  @apply shadow-[inset_0_0_6px_rgba(255,255,255,.08),_0_0_12px_rgba(190,24,93,.35)];
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

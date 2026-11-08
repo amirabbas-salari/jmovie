@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { FiChevronRight, FiChevronLeft } from "react-icons/fi";
 import CollectionCard from "./CollectionCard";
 import useCollections from "../../hooks/useCollections";
+import SectionHeader from "../ui/SectionHeader";
 
 
 export default function CollectionRow({ onSeeAll }) {
@@ -34,26 +35,12 @@ export default function CollectionRow({ onSeeAll }) {
 
   return (
     <section dir="rtl" className="cv-auto relative w-full py-6 text-white">
-      {/* هدر */}
-      <div className="mb-4 flex items-center justify-between px-6 sm:px-10 lg:px-16">
-        <div className="flex items-center gap-3">
-          <span className="h-6 w-1 rounded-full bg-gradient-to-b
-            from-rose-500 to-[#751a6c] shadow-[0_0_10px_[#751a6c]]" />
-          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">مجموعه‌ها</h2>
-        </div>
-
-        {onSeeAll && (
-          <button
-            type="button"
-            onClick={onSeeAll}
-            className="flex items-center gap-1 text-sm text-white/60
-              transition-colors hover:text-white"
-          >
-            مشاهده همه
-            <FiChevronLeft className="text-base" />
-          </button>
-        )}
-      </div>
+      <SectionHeader
+        title="مجموعه‌ها"
+        eyebrow="کالکشن‌های سینمایی"
+        onSeeAll={onSeeAll}
+        className="px-6 sm:px-10 lg:px-16"
+      />
 
       
       {/* لیست + دکمه‌های ناوبری */}

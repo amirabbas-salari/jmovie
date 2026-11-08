@@ -26,21 +26,31 @@ export default function MediaPage({
   return (
     <div
       dir="rtl"
-      className="min-h-screen bg-gradient-to-b from-black to-[#1A0B0C] px-4 py-6 sm:px-6 sm:py-8 md:px-8"
+      className="min-h-screen px-4 py-6 sm:px-6 sm:py-8 md:px-8"
     >
       <SideImage showOther={false} showMinions={false}/>
 
       {/* هاله‌های نوری */}
-      <div className="pointer-events-none fixed -right-20 -top-20 h-60 w-60 rounded-full bg-fuchsia-600/20 blur-3xl sm:-right-40 sm:-top-40 sm:h-96 sm:w-96" />
+      <div className="pointer-events-none fixed -right-20 -top-20 h-60 w-60 rounded-full bg-fuchsia-600/[0.13] blur-3xl sm:-right-40 sm:-top-40 sm:h-96 sm:w-96" />
 
-      <div className="pointer-events-none fixed -left-20 top-20 h-60 w-60 rounded-full bg-blue-600/20 blur-3xl sm:-left-40 sm:top-40 sm:h-96 sm:w-96" />
+      <div className="pointer-events-none fixed -left-20 top-20 h-60 w-60 rounded-full bg-rose-600/[0.12] blur-3xl sm:-left-40 sm:top-40 sm:h-96 sm:w-96" />
 
-      <div 
+      <div
         className="relative mx-auto mt-20 max-w-[1500px] sm:mt-24 md:mt-28"
       >
-        <h1 className="mb-6 text-center text-xl font-bold text-white sm:mb-10 sm:text-4xl">
-          {title}
-        </h1>
+        <header className="mb-7 text-center sm:mb-10">
+          <p className="section-eyebrow mb-2">
+            {type === "series" ? "آرشیو سریال‌ها" : "آرشیو فیلم‌ها"}
+          </p>
+          <h1 className="text-3xl font-black text-white sm:text-5xl">
+            {title === "فیلم‌ها" ? <>فیلم‌های <span className="text-gradient">مووی‌ورس</span></> : title === "سریال‌ها" ? <>سریال‌های <span className="text-gradient">مووی‌ورس</span></> : title}
+          </h1>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-zinc-400">
+            {pagination?.count
+              ? `${pagination.count.toLocaleString("fa-IR")} اثر برای تماشا و دانلود`
+              : "جدیدترین و محبوب‌ترین آثار را با فیلترهای پیشرفته پیدا کنید."}
+          </p>
+        </header>
 
         {/* //TODO */}
         <AdvanceSearch
@@ -56,18 +66,22 @@ export default function MediaPage({
         )}
 
         {loading ? (
-          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 l:grid-cols-6">
-            {Array.from({ length: 10 }).map((_, index) => (
-              <div
-                key={index}
-                className="aspect-[2/3] animate-pulse rounded-2xl bg-white/5"
-              />
+          <div className="mt-8 grid grid-cols-2 justify-items-center gap-3 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {Array.from({ length: 12 }).map((_, index) => (
+              <div key={index} className="w-full max-w-[230px] space-y-2">
+                <div className="skeleton aspect-[2/3] w-full" />
+                <div className="h-3 w-4/5 rounded-full bg-white/[0.08]" />
+                <div className="ml-auto h-3 w-3/5 rounded-full bg-white/[0.05]" />
+              </div>
             ))}
           </div>
         ) : media.length === 0 ? (
-          <p className="py-12 text-center text-sm text-white/60 sm:py-16 sm:text-base">
-            فیلمی پیدا نشد.
-          </p>
+          <div className="glass mx-auto mt-8 max-w-lg rounded-[26px] px-6 py-14 text-center">
+            <p className="text-base font-bold text-white">اثری پیدا نشد</p>
+            <p className="mt-2 text-sm leading-7 text-zinc-400">
+              فیلترها را تغییر دهید یا عبارت دیگری جستجو کنید.
+            </p>
+          </div>
         ) : (
           <div className="mt-8 justify-items-center grid grid-cols-2 gap-3 sm:mt-10 sm:grid-cols-3 sm:gap-4 md:grid-cols-4 md lg:grid-cols-5 xl:grid-cols-6">
             {media.map((item) => (
