@@ -13,6 +13,8 @@ from series.filters import SeriesFilter
 from series.models import Episode, Season, Series, SeriesCast
 from series.serializers import SeriesDetailSerializer, SeriesListSerializer
 from series.throttles import SeriesThrottle, SeriesAnonThrottle
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 
 
 class SeriesViewSet(viewsets.ReadOnlyModelViewSet):
@@ -92,6 +94,7 @@ class SeriesViewSet(viewsets.ReadOnlyModelViewSet):
         ],
         responses={200: SeriesListSerializer(many=True)},
     )
+    @method_decorator(cache_page(60 * 2))
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
 

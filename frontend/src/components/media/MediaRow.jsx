@@ -18,7 +18,7 @@ export default function MediaRow({ title, media = [], onSeeAll, type="media" }) 
   return (
     <section dir="rtl" className="relative w-full py-6 text-white">
       {/* هدر */}
-      <div className="mb-4 flex items-center justify-between px-6 sm:px-10 lg:px-16">
+      <div className="mb-4 flex items-center justify-between px-4 sm:px-10 lg:px-16">
         <div className="flex items-center gap-3">
           <span className="h-6 w-1 rounded-full bg-gradient-to-b
             from-rose-500 to-[#751a6c] shadow-[0_0_10px_[#751a6c]]" />
@@ -80,8 +80,8 @@ export default function MediaRow({ title, media = [], onSeeAll, type="media" }) 
         {/* اسکرول افقی */}
         <div
           ref={scrollRef}
-          className="flex gap-4 overflow-x-auto scroll-smooth px-6 pb-2
-            sm:px-10 lg:px-16
+          className="flex gap-3 overflow-x-auto scroll-smooth px-4 pb-2
+            sm:gap-4 sm:px-10 lg:px-16
             [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none]
             [scrollbar-width:none]"
         >
