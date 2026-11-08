@@ -1,33 +1,25 @@
 from rest_framework import serializers
+
 from .models import Download
 
 
 class DownloadSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
-    
+
     def get_url(self, obj):
         request = self.context.get("request")
 
-        if request and request.user.is_authenticated:
-            return obj.url
+        # قبلاً فقط «لاگین بودن» چک می‌شد و هر کاربر رایگان در پاسخ
+        # جزئیات فیلم/سریال، URL دانلودهای VIP (is_vip=True) را هم می‌دید
+        # — دور زدن کامل سیستم VIP. حالا: مهمان هیچ لینکی نمی‌بیند،
+        # دانلود VIP فقط برای کاربر VIP و دانلود عادی برای هر کاربر
+        # واردشده نمایش داده می‌شود.
+        if not request or not request.user.is_authenticated:
+            return None
+        if obj.is_vip and not getattr(request.user, "is_vip", False):
+            return None
+        return obj.url
 
-        return None
-    
     class Meta:
         model = Download
         fields = "__all__"
-
-
-# class DownloadCreateSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = Download
-#         fields = (
-#             "content_type",
-#             "object_id",
-#             "title",
-#             "quality",
-#             "language",
-#             "size",
-#             "url",
-#             "is_vip",
-#         )

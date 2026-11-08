@@ -152,3 +152,38 @@ class TmdbLookupTest(TestCase):
         cast = {c["tmdb_id"]: c for c in resp.data["cast"]}
         self.assertIsNotNone(cast["500"]["local_id"])
         self.assertEqual(cast["501"]["role"], "director")
+
+
+class AdminVipEscalationTest(TestCase):
+    """ادمین عادی (حتی با مجوز ویرایش کاربر) نباید بتواند کسی را VIP کند."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.superadmin = make_user("root2", is_staff=True, is_superuser=True)
+        self.user_admin = make_user("usermgr", is_staff=True)
+        role = Group.objects.create(name="مدیر کاربران")
+        role.permissions.set(Permission.objects.filter(
+            codename__in=["view_user", "change_user"],
+        ))
+        self.user_admin.groups.add(role)
+        self.target = make_user("target")
+
+    def test_staff_cannot_grant_vip(self):
+        self.client.force_authenticate(user=self.user_admin)
+        res = self.client.patch(
+            f"/admin/users/{self.target.id}/",
+            {"is_vip": True}, format="json",
+        )
+        self.assertEqual(res.status_code, 403)
+        self.target.refresh_from_db()
+        self.assertFalse(self.target.is_vip)
+
+    def test_superadmin_can_grant_vip(self):
+        self.client.force_authenticate(user=self.superadmin)
+        res = self.client.patch(
+            f"/admin/users/{self.target.id}/",
+            {"is_vip": True}, format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.target.refresh_from_db()
+        self.assertTrue(self.target.is_vip)

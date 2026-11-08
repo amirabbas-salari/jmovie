@@ -1,6 +1,8 @@
 from django.contrib.contenttypes.models import ContentType
+from django.db.models import Q
 from rest_framework import viewsets, permissions, filters
 from rest_framework.exceptions import ValidationError
+from rest_framework.throttling import ScopedRateThrottle
 
 from drf_spectacular.utils import (
     extend_schema,
@@ -9,7 +11,7 @@ from drf_spectacular.utils import (
 )
 
 from .models import Comment
-from .serializers import CommentSerializer
+from .serializers import CommentSerializer, CommentCreateSerializer
 from accounts.permissions import IsOwner
 
 
@@ -30,14 +32,35 @@ from accounts.permissions import IsOwner
     ]
 )
 class CommentViewSet(viewsets.ModelViewSet):
-    serializer_class = CommentSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwner]
 
     filter_backends = [filters.OrderingFilter]
     ordering = ["-created_at"]
 
+    def get_serializer_class(self):
+        if self.action == "create":
+            return CommentCreateSerializer
+        return CommentSerializer
+
+    def get_throttles(self):
+        # سقف ساخت کامنت فقط روی POST؛ خواندن لیست نباید محدود شود.
+        if self.action == "create":
+            throttle = ScopedRateThrottle()
+            throttle.scope = "comments"
+            return [throttle]
+        return []
+
     def get_queryset(self):
         queryset = Comment.objects.select_related("user")
+
+        # نظارت (moderation) باید واقعاً اعمال شود: قبلاً همه‌ی کامنت‌ها —
+        # حتی تأییدنشده و غیرفعال — عمومی نمایش داده می‌شدند و صف بررسی
+        # ادمین عملاً بی‌اثر بود. حالا عموم فقط تأییدشده‌های فعال را
+        # می‌بینند و هر کاربر کامنت‌های خودش (در انتظار تأیید) را هم می‌بیند.
+        visible = Q(is_active=True, is_approved=True)
+        if self.request.user.is_authenticated:
+            visible |= Q(user=self.request.user)
+        queryset = queryset.filter(visible)
 
         content_type = self.request.query_params.get("content_type")
         object_id = self.request.query_params.get("object_id")
