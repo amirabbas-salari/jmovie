@@ -6,10 +6,18 @@ import HeroSection from "../components/home/HeroSection";
 import MediaRow from "../components/media/MediaRow";
 import CastSection from "../components/media/CastRow";
 import CollectionRow from "../components/collections/CollectionRow";
+import { useSeo } from "../seo/useSeo";
+import { websiteJsonLd } from "../seo/jsonLd";
 
 
 function Home() {
   const navigate = useNavigate();
+
+  useSeo({
+    title: "مووی‌ورس | دانلود و تماشای آنلاین فیلم و سریال با زیرنویس فارسی",
+    path: "/",
+    jsonLd: websiteJsonLd(),
+  });
 
   const [movies, setMovies] = useState([]);
   const [series, setSeries] = useState([]);

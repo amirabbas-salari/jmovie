@@ -4,6 +4,7 @@ import { FiBookmark, FiCheck, FiHeart, FiLoader } from "react-icons/fi"
 import api from "../services/api"
 import MediaCard from "../components/media/MediaCard"
 import { useMyLists } from "../context/MyListsContext"
+import { useSeo } from "../seo/useSeo"
 
 const TABS = [
   { key: "favorite", label: "علاقه‌مندی‌ها", Icon: FiHeart, emptyHint: "هنوز فیلمی را به علاقه‌مندی‌ها اضافه نکرده‌اید؛ روی قلبِ کارت هر فیلم یا سریال بزنید." },
@@ -12,6 +13,9 @@ const TABS = [
 ]
 
 export default function MyListsPage() {
+  // صفحه‌ی شخصی کاربر است؛ نباید در گوگل ایندکس شود.
+  useSeo({ title: "لیست‌های من | مووی‌ورس", path: "/my-lists", noindex: true })
+
   const [activeTab, setActiveTab] = useState("favorite")
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)

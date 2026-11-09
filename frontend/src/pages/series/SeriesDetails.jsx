@@ -11,11 +11,39 @@ import MediaRow from "../../components/media/MediaRow";
 import CommentsSection from "../../components/media/CommentsSection";
 import SeasonsSection from "../../components/series-details/index";
 import { normalize } from "../../utils/movie";
+import { useSeo } from "../../seo/useSeo";
+import { breadcrumbJsonLd, seriesJsonLd } from "../../seo/jsonLd";
 
 const SeriesDetails = () => {
   const navigate = useNavigate();
   const { slug } = useParams();
   const [series, setSeries] = useState(null);
+
+  // سئو: تایتل/دیسکریپشن هدفمند برای «دانلود سریال X» + داده‌ی ساخت‌یافته
+  useSeo({
+    title: series
+      ? `دانلود سریال ${series.title} (${series.original_title || ""} ${series.year || ""}) با زیرنویس فارسی | مووی‌ورس`
+      : "دانلود سریال | مووی‌ورس",
+    description: series
+      ? `دانلود و تماشای آنلاین سریال ${series.title} (${series.original_title || ""}) با امتیاز ${series.imdb_rating || "—"} در IMDb، زیرنویس فارسی و کیفیت‌های متنوع در مووی‌ورس. ${series.description ? String(series.description).slice(0, 110) : ""}`
+      : undefined,
+    keywords: series
+      ? `دانلود سریال ${series.original_title}, دانلود سریال ${series.title}, ${series.original_title} با زیرنویس فارسی, تماشای آنلاین ${series.original_title}`
+      : undefined,
+    path: series ? `/series/${series.slug}` : undefined,
+    image: series?.backdrop_url || series?.poster_url,
+    type: "video.tv_show",
+    jsonLd: series
+      ? [
+          seriesJsonLd(series),
+          breadcrumbJsonLd([
+            { name: "خانه", path: "/" },
+            { name: "سریال‌ها", path: "/series" },
+            { name: series.title, path: `/series/${series.slug}` },
+          ]),
+        ]
+      : undefined,
+  });
   const [suggestions, setSuggestions] = useState([]);
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);

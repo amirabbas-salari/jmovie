@@ -11,6 +11,7 @@ import {
   Clock3,
 } from "lucide-react";
 import SideImage from "../components/ui/SideImages";
+import { useSeo } from "../seo/useSeo";
 
 const faqItems = [
   {
@@ -284,6 +285,22 @@ function ContactCenter() {
 
 
 export default function SupportPage() {
+  useSeo({
+    title: "پشتیبانی و سوالات متداول | مووی‌ورس",
+    description:
+      "پاسخ سوالات متداول دانلود و تماشای آنلاین، گزارش خرابی لینک و درخواست فیلم و سریال جدید در پشتیبانی مووی‌ورس.",
+    path: "/support",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: faqItems.map((f) => ({
+        "@type": "Question",
+        name: f.question,
+        acceptedAnswer: { "@type": "Answer", text: f.answer },
+      })),
+    },
+  });
+
   const [openIndex, setOpenIndex] = useState(0);
 
   const [form, setForm] = useState({

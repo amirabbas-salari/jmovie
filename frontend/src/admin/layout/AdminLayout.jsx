@@ -4,8 +4,12 @@ import AdminSidebar from "../components/AdminSidebar"
 import AdminTopbar from "../components/AdminTopbar"
 import { useAdmin } from "../context/AdminContext"
 import { Spinner } from "../components/ui"
+import { useSeo } from "../../seo/useSeo"
 
 export default function AdminLayout() {
+  // پنل مدیریت هرگز نباید در موتورهای جستجو ایندکس شود.
+  useSeo({ title: "پنل مدیریت | مووی‌ورس", noindex: true })
+
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { loading } = useAdmin()
 

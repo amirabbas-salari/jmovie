@@ -152,7 +152,7 @@ function MediaCard({
           src={posterImage(media.poster || media.poster_url)}
           srcSet={posterSrcSet(media.poster || media.poster_url)}
           sizes="(max-width: 640px) 148px, 230px"
-          alt={media.original_title}
+          alt={`${type === "series" ? "دانلود سریال" : "دانلود فیلم"} ${media.title || media.original_title} (${media.original_title || ""})`}
           loading="lazy"
           decoding="async"
           width={342}

@@ -9,6 +9,8 @@ import MediaCard from "../../components/media/MediaCard";
 import CollectionHero from "../../components/collections/CollectionHero";
 
 import useCollectionDetail from "../../hooks/useCollectionDetail";
+import { useSeo } from "../../seo/useSeo";
+import { breadcrumbJsonLd, collectionJsonLd } from "../../seo/jsonLd";
 
 
 export default function CollectionDetailPage() {
@@ -21,6 +23,39 @@ export default function CollectionDetailPage() {
     loading,
     error,
   } = useCollectionDetail(slug);
+
+  const collectionItems = (collection?.items || []).map((item) => {
+    const media = item.movie || item.series || item.media || item;
+    const isSeriesItem = Boolean(item.series) || media?.media_type === "series";
+    return {
+      name: media?.title || media?.original_title || "بدون عنوان",
+      path: media?.slug
+        ? `/${isSeriesItem ? "series" : "movie"}/${media.slug}`
+        : "/collection",
+      image: media?.poster_url || media?.poster,
+    };
+  });
+
+  useSeo({
+    title: collection
+      ? `کالکشن ${collection.title || collection.name} | دانلود فیلم‌های این مجموعه در مووی‌ورس`
+      : "کالکشن فیلم | مووی‌ورس",
+    description: collection
+      ? `دانلود و تماشای آنلاین همه‌ی فیلم‌های کالکشن ${collection.title || collection.name} با زیرنویس فارسی و بهترین کیفیت در مووی‌ورس. ${collection.description ? String(collection.description).slice(0, 110) : ""}`
+      : undefined,
+    path: `/collection/${slug}`,
+    image: collection?.cover || collection?.poster || collection?.image,
+    jsonLd: collection
+      ? [
+          collectionJsonLd(collection, collectionItems),
+          breadcrumbJsonLd([
+            { name: "خانه", path: "/" },
+            { name: "مجموعه‌ها", path: "/collection" },
+            { name: collection.title || collection.name, path: `/collection/${slug}` },
+          ]),
+        ]
+      : undefined,
+  });
 
 
 

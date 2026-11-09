@@ -3,6 +3,8 @@ import AdvanceSearch from "../../components/media/AdvanceSearch";
 import MediaCard from "../../components/media/MediaCard";
 import Pagination from "../ui/Pagination";
 import { MdTitle } from "react-icons/md";
+import { useSeo } from "../../seo/useSeo";
+import { breadcrumbJsonLd, itemListJsonLd } from "../../seo/jsonLd";
 
 export default function MediaPage({
   title,
@@ -22,6 +24,35 @@ export default function MediaPage({
       ...patch,
     }));
   };
+
+  const isSeriesPage = type === "series";
+  const listPath = isSeriesPage ? "/series" : "/movies";
+  useSeo({
+    title: isSeriesPage
+      ? "دانلود سریال خارجی با زیرنویس فارسی | مووی‌ورس"
+      : "دانلود فیلم خارجی با زیرنویس فارسی | مووی‌ورس",
+    description: isSeriesPage
+      ? "آرشیو کامل دانلود و تماشای آنلاین سریال‌های خارجی به‌روز با زیرنویس فارسی، کیفیت‌های متنوع و لینک مستقیم در مووی‌ورس."
+      : "آرشیو کامل دانلود و تماشای آنلاین فیلم‌های خارجی به‌روز با زیرنویس فارسی، کیفیت‌های 480p تا 4K و لینک مستقیم در مووی‌ورس.",
+    path: listPath,
+    jsonLd:
+      media?.length > 0
+        ? [
+            itemListJsonLd({
+              name: title,
+              items: media.slice(0, 20).map((m) => ({
+                name: m.title || m.original_title,
+                path: `/${isSeriesPage ? "series" : "movie"}/${m.slug}`,
+                image: m.poster_url || m.poster,
+              })),
+            }),
+            breadcrumbJsonLd([
+              { name: "خانه", path: "/" },
+              { name: title, path: listPath },
+            ]),
+          ]
+        : undefined,
+  });
 
   return (
     <div

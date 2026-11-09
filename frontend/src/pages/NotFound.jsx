@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Clapperboard, Film, Home, Layers, Loader2, Popcorn, Search, Ticket, Tv } from "lucide-react"
 import api from "../services/api"
+import { useSeo } from "../seo/useSeo"
 
 // صفحه‌ی ۴۰۴ با تم سینمایی سایت: پس‌زمینه‌ی تیره‌ی برند (#08040d)،
 // قرمز برند، فونت وزیرمتن و حال‌وهوای «فیلم گمشده».
@@ -24,6 +25,12 @@ function FilmStrip({ side }) {
 }
 
 export default function NotFound() {
+  useSeo({
+    title: "صفحه پیدا نشد (۴۰۴) | مووی‌ورس",
+    description: "این صفحه وجود ندارد؛ از جستجوی مووی‌ورس فیلم یا سریال موردنظرتان را پیدا کنید.",
+    noindex: true,
+  })
+
   const navigate = useNavigate()
   const location = useLocation()
   const [query, setQuery] = useState("")

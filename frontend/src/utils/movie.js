@@ -16,6 +16,10 @@ export const normalize = (d = {}) => {
     year: d.release_date ? new Date(d.release_date).getFullYear() : d.year,
     imdb_rating: parseFloat(d.imdb_rating) || 0,
     imdb_votes: d.imdb_votes?.toLocaleString("fa-IR"),
+    // مقادیر خام برای سئو/JSON-LD (مدت به دقیقه و تعداد رأی عددی)
+    imdb_votes_count: d.imdb_votes,
+    runtime_minutes: d.runtime,
+    poster_url: d.poster_url,
     views: d.views?.toLocaleString("fa-IR"),
     duration: fmtRuntime(d.runtime),
     // country: d.country,
