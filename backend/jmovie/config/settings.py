@@ -57,7 +57,7 @@ _env_secret_key = os.getenv("SECRET_KEY")
 if _env_secret_key:
     SECRET_KEY = _env_secret_key
 elif DEBUG:
-    SECRET_KEY = "django-insecure-LOCAL-DEV-ONLY-change-me-in-production"
+    SECRET_KEY = "django-insecure-qcb*(ym905qto=h!t^ka3gjzxtzots4cylzx3^l2r12h_d=ld#"
 else:
     raise ImproperlyConfigured(
         "SECRET_KEY باید در محیط production از طریق متغیر محیطی ست شود."
