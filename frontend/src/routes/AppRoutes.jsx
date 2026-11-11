@@ -49,6 +49,7 @@ const Collections = lazy(() => import("../admin/pages/Collections"))
 const CollectionForm = lazy(() => import("../admin/pages/CollectionForm"))
 const Downloads = lazy(() => import("../admin/pages/Downloads"))
 const Comments = lazy(() => import("../admin/pages/Comments"))
+const AdminAgent = lazy(() => import("../admin/pages/Agent"))
 const Users = lazy(() => import("../admin/pages/Users"))
 const UserForm = lazy(() => import("../admin/pages/UserForm"))
 const Roles = lazy(() => import("../admin/pages/Roles"))
@@ -124,6 +125,7 @@ function AppRoutes() {
           {/* downloads & comments */}
           <Route path="downloads" element={<Downloads />} />
           <Route path="comments" element={<Comments />} />
+          <Route path="agent" element={<AdminAgent />} />
 
           {/* users */}
           <Route path="users" element={<Users />} />

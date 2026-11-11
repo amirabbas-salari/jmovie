@@ -108,6 +108,10 @@ class Series(TimeStampedModel):
         default=False,
         help_text="Whether the series has ended"
     )
+
+    # هم‌معنای Movie.is_active: پیش‌نویس‌های ایجنت با False ذخیره و با
+    # تأیید ادمین True می‌شوند؛ ویوهای عمومی فقط فعال‌ها را نشان می‌دهند.
+    is_active = models.BooleanField(default=True)
     
     number_of_seasons = models.PositiveSmallIntegerField(
         null=True,

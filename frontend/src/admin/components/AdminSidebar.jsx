@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom"
 import {
-  Clapperboard, Download, Film, History, LayoutDashboard, Layers,
+  Bot, Clapperboard, Download, Film, History, LayoutDashboard, Layers,
   MessageSquare, ShieldCheck, Tag, Users, X,
 } from "lucide-react"
 import { useAdmin } from "../context/AdminContext"
@@ -16,6 +16,7 @@ const NAV = [
   { to: "/admin/collections", label: "کالکشن‌ها", icon: Layers, perm: P.collectionView },
   { to: "/admin/downloads", label: "لینک‌های دانلود", icon: Download, perm: P.downloadView },
   { to: "/admin/comments", label: "نظرات کاربران", icon: MessageSquare, perm: P.commentView },
+  { to: "/admin/agent", label: "ایجنت محتوا", icon: Bot, perm: P.agentView },
   { to: "/admin/users", label: "کاربران", icon: Users, perm: P.userView },
   { to: "/admin/roles", label: "نقش‌ها و دسترسی‌ها", icon: ShieldCheck, superOnly: true },
   { to: "/admin/audit-logs", label: "لاگ فعالیت‌ها", icon: History, superOnly: true },

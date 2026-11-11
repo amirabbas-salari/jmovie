@@ -34,6 +34,8 @@ export const P = {
   userAdd: "accounts.add_user",
   userChange: "accounts.change_user",
   userDelete: "accounts.delete_user",
+  agentView: "content_agent.view_agentrun",
+  agentRun: "content_agent.add_agentrun",
 }
 
 // برچسب فارسی گروه‌های مجوز در صفحه‌ی «نقش‌ها»

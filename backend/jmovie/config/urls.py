@@ -65,6 +65,9 @@ urlpatterns = [
     
     # ai
     path("ai/", include("ai.urls")),
+
+    # ایجنت محتوای خودکار (پنل ادمین)
+    path("agent/", include("content_agent.urls")),
     
     # search
     path("search/", GlobalSearchView.as_view(), name="global-search"),

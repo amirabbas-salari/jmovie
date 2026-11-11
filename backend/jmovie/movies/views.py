@@ -49,7 +49,9 @@ class MovieViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-release_date"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        # پیش‌نویس‌ها (is_active=False — مثلاً واردشده‌های در انتظار تأیید
+        # ایجنت محتوا) هرگز نباید در سایت عمومی دیده شوند.
+        qs = super().get_queryset().filter(is_active=True)
         if self.action == "list":
             # سریالایزر لیست فقط ژانرها را لازم دارد؛ پریفچ عوامل و دانلودها
             # در لیست فقط کوئری و حجم پاسخ را سنگین می‌کرد. only() هم فقط
