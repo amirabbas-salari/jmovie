@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { CheckSquare, Eraser, Pencil, Star, Trash2 } from "lucide-react"
+import { CheckSquare, Eraser, Loader2, Pencil, Star, Trash2 } from "lucide-react"
 import { useAdmin } from "../context/AdminContext"
 import { getApiError } from "../services/adminApi"
 import {
@@ -93,9 +93,14 @@ export default function MediaListPage({ title, subtitle, basePath, api, perms, k
   }
 
   const [purgeItems, setPurgeItems] = useState([])
+  const [purgeLoading, setPurgeLoading] = useState(false)
 
   const startPurge = async () => {
+    // بدون فیدبک «در حال بررسی» کاربر فکر می‌کرد دکمه کار نمی‌کند؛ روی
+    // داده‌ی حجیم پاسخ سرور ممکن است چند ثانیه طول بکشد.
+    if (purgeLoading) return
     setActionError("")
+    setPurgeLoading(true)
     try {
       const res = await api.withoutDownloads()
       setPurgeCount(res.count)
@@ -103,6 +108,8 @@ export default function MediaListPage({ title, subtitle, basePath, api, perms, k
       setConfirmPurge(true)
     } catch (err) {
       setActionError(getApiError(err))
+    } finally {
+      setPurgeLoading(false)
     }
   }
 
@@ -134,10 +141,16 @@ export default function MediaListPage({ title, subtitle, basePath, api, perms, k
           <button
             type="button"
             onClick={startPurge}
-            className="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20"
+            disabled={purgeLoading}
+            aria-busy={purgeLoading}
+            className="flex items-center gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-wait disabled:opacity-60"
           >
-            <Eraser className="h-4 w-4" />
-            حذف {kindLabel}های بدون لینک دانلود
+            {purgeLoading
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <Eraser className="h-4 w-4" />}
+            {purgeLoading
+              ? "در حال بررسی لینک‌های دانلود..."
+              : `حذف ${kindLabel}های بدون لینک دانلود`}
           </button>
         )}
       </div>

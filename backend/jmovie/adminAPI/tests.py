@@ -252,6 +252,42 @@ class AdminBulkDeleteTest(TestCase):
         self.assertTrue(Movie.objects.filter(id=self.m1.id).exists())
         self.assertFalse(Movie.objects.filter(id=self.m2.id).exists())
 
+    def test_without_downloads_preview_movies_shape(self):
+        self.client.force_authenticate(user=self.superadmin)
+        res = self.client.get("/admin/movies/without-downloads/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 1)  # فقط m2
+        self.assertEqual(res.data["results"][0]["title"], "فیلم ۲")
+        self.assertIn("year", res.data["results"][0])
+
+    def test_purge_writes_audit_logs(self):
+        from adminAPI.models import AdminAuditLog
+
+        self.client.force_authenticate(user=self.superadmin)
+        res = self.client.post("/admin/movies/purge-without-downloads/")
+        self.assertEqual(res.data["deleted"], 1)
+        logs = AdminAuditLog.objects.filter(
+            action=AdminAuditLog.ACTION_DELETE, model_label="movies.movie"
+        )
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(logs.first().object_repr, "فیلم ۲")
+
+    def test_bulk_delete_writes_audit_logs(self):
+        from adminAPI.models import AdminAuditLog
+
+        self.client.force_authenticate(user=self.superadmin)
+        res = self.client.post(
+            "/admin/movies/bulk-delete/",
+            {"ids": [self.m1.id, self.m2.id]}, format="json",
+        )
+        self.assertEqual(res.data["deleted"], 2)
+        self.assertEqual(
+            AdminAuditLog.objects.filter(
+                action=AdminAuditLog.ACTION_DELETE, model_label="movies.movie"
+            ).count(),
+            2,
+        )
+
     def test_purge_series_keeps_series_with_episode_downloads(self):
         self.client.force_authenticate(user=self.superadmin)
         count = self.client.get("/admin/series/without-downloads-count/")
@@ -359,3 +395,13 @@ class AdminSeriesWithoutDownloadsDetectionTest(TestCase):
         data, titles = self._preview_titles()
         self.assertIn("قسمت بدون لینک", titles)
         self.assertEqual(data["count"], 1)
+
+    def test_preview_year_comes_from_start_date(self):
+        import datetime
+
+        self.Series.objects.create(
+            title="سریال قدیمی", imdb_id="tt4000004",
+            start_date=datetime.date(2021, 5, 1),
+        )
+        data, _ = self._preview_titles()
+        self.assertEqual(data["results"][0]["year"], 2021)
