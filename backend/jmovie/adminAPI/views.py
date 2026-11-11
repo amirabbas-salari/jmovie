@@ -323,7 +323,61 @@ class TmdbLookupView(APIView):
 # ---------------------------------------------------------------------------
 # Content viewsets
 # ---------------------------------------------------------------------------
-class AdminMovieViewSet(AdminModelViewSet):
+class MediaBulkActionsMixin:
+    """حذف گروهی و پاکسازی «بدون لینک دانلود» برای فیلم/سریال.
+
+    برای سریال، دانلودهای قسمت‌ها (از مسیر فصل‌ها) هم حساب می‌شوند تا
+    سریالی که قسمت‌هایش لینک دارند اشتباهی «بدون لینک» تشخیص داده نشود.
+    """
+
+    media_is_series = False
+
+    def _without_downloads_qs(self):
+        qs = self.get_queryset() if hasattr(self, "get_queryset") else self.queryset
+        qs = qs.annotate(_dl_count=Count("downloads", distinct=True))
+        if self.media_is_series:
+            qs = qs.annotate(
+                _ep_dl_count=Count("seasons__episodes__downloads", distinct=True)
+            ).filter(_dl_count=0, _ep_dl_count=0)
+        else:
+            qs = qs.filter(_dl_count=0)
+        return qs
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        ids = request.data.get("ids")
+        if not isinstance(ids, list) or not ids:
+            return Response(
+                {"ids": "فهرست آیدی‌ها (ids) لازم است."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        qs = self.queryset.filter(id__in=ids)
+        items = list(qs)
+        for item in items:
+            self._log(request, AdminAuditLog.ACTION_DELETE, item)
+        qs.delete()
+        return Response({"deleted": len(items)})
+
+    @action(detail=False, methods=["get"], url_path="without-downloads-count")
+    def without_downloads_count(self, request):
+        return Response({"count": self._without_downloads_qs().count()})
+
+    @action(detail=False, methods=["post"], url_path="purge-without-downloads")
+    def purge_without_downloads(self, request):
+        qs = self._without_downloads_qs()
+        items = list(qs)
+        for item in items:
+            self._log(request, AdminAuditLog.ACTION_DELETE, item)
+        qs.delete()
+        return Response({"deleted": len(items)})
+
+
+class AdminMovieViewSet(MediaBulkActionsMixin, AdminModelViewSet):
+    extra_action_permissions = {
+        "bulk_delete": "movies.delete_movie",
+        "purge_without_downloads": "movies.delete_movie",
+        "without_downloads_count": "movies.view_movie",
+    }
     queryset = Movie.objects.all().order_by("-updated_at")
     serializer_class = AdminMovieSerializer
     list_serializer_class = AdminMovieListSerializer
@@ -350,7 +404,13 @@ class AdminMovieViewSet(AdminModelViewSet):
         return qs
 
 
-class AdminSeriesViewSet(AdminModelViewSet):
+class AdminSeriesViewSet(MediaBulkActionsMixin, AdminModelViewSet):
+    media_is_series = True
+    extra_action_permissions = {
+        "bulk_delete": "series.delete_series",
+        "purge_without_downloads": "series.delete_series",
+        "without_downloads_count": "series.view_series",
+    }
     queryset = Series.objects.all().order_by("-updated_at")
     serializer_class = AdminSeriesSerializer
     list_serializer_class = AdminSeriesListSerializer
