@@ -49,6 +49,13 @@ class FakeTMDBClient:
     def _get(self, endpoint, params=None):
         if endpoint.startswith("trending/movie"):
             return {"results": self.LIST}
+        if endpoint == "search/multi":
+            if "test movie" in (params or {}).get("query", ""):
+                return {"results": [
+                    {"media_type": "movie", "id": 999001,
+                     "vote_average": 8.4, "vote_count": 1500},
+                ]}
+            return {"results": []}
         return {"results": []}
 
     def movie_full_details(self, tmdb_id, language="fa-IR"):
@@ -134,3 +141,45 @@ class ContentAgentTest(TestCase):
         user = User.objects.create_user(username="u1", password="Str0ng!Pass123")
         client.force_authenticate(user)
         self.assertEqual(client.get("/agent/drafts/").status_code, 403)
+
+
+SITEMAP_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/movie/test-movie-2024/</loc></url>
+  <url><loc>https://example.com/movie/existing-film/</loc></url>
+</urlset>
+"""
+
+
+class FakeResponse:
+    def __init__(self, text):
+        self.text = text
+
+    def raise_for_status(self):
+        pass
+
+
+class CustomSourceTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.discovery_source_url = "https://example.com/sitemap.xml"
+        settings_obj.translate_with_ai = False
+        settings_obj.save()
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClient)
+    @patch("requests.get", return_value=FakeResponse(SITEMAP_XML))
+    def test_discovers_titles_from_custom_sitemap(self, _mock_get):
+        agent = ContentAgent()
+        candidates = agent.discover_from_custom_source(limit=10)
+        keys = {(c["media_type"], c["tmdb_id"]) for c in candidates}
+        self.assertIn(("movie", 999001), keys)
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClient)
+    @patch("requests.get", return_value=FakeResponse(SITEMAP_XML))
+    def test_run_with_custom_source_imports_draft(self, _mock_get):
+        run = ContentAgent().run(sources=["custom"], max_items=5)
+        self.assertEqual(run.created_movies, 1)
+        self.assertFalse(Movie.objects.get(tmdb_id=999001).is_active)

@@ -62,11 +62,125 @@ class ContentAgent:
         self.config = settings_obj or AgentSettings.load()
         self.client = TMDBClient()
 
+    # ---------------- کشف از منبع سفارشی (sitemap/RSS یک سایت) ----------------
+    def discover_from_custom_source(self, limit):
+        """از sitemap/RSS منبع فقط «عنوان» آثار خوانده و در TMDB پیدا
+        می‌شود. هیچ لینک دانلودی از منبع خوانده یا ذخیره نمی‌شود."""
+        import re
+
+        import requests
+
+        url = (self.config.discovery_source_url or "").strip()
+        if not url:
+            return []
+
+        def fetch(u):
+            resp = requests.get(
+                u,
+                timeout=20,
+                headers={"User-Agent": "MovieVerseAgent/1.0 (+content discovery)"},
+            )
+            resp.raise_for_status()
+            return resp.text
+
+        def titles_from(xml_text):
+            locs = re.findall(r"<loc>\s*(.*?)\s*</loc>", xml_text, re.I | re.S)
+            titles = []
+            # sitemap index: یک لایه فرزندها را هم بخوان
+            child_sitemaps = [l for l in locs if l.rstrip("/").endswith(".xml")][:3]
+            entries = [l for l in locs if l not in child_sitemaps]
+            for child in child_sitemaps:
+                try:
+                    entries += re.findall(
+                        r"<loc>\s*(.*?)\s*</loc>", fetch(child), re.I | re.S
+                    )
+                except Exception:
+                    logger.warning("custom source child sitemap failed: %s", child)
+            for loc in entries:
+                imdb_match = re.search(r"(tt\d{7,9})", loc)
+                segment = loc.rstrip("/").rsplit("/", 1)[-1]
+                segment = re.sub(r"\.(html?|php|aspx?)$", "", segment, flags=re.I)
+                title = re.sub(r"[-_]+", " ", segment)
+                title = re.sub(r"\b(19|20)\d{2}\b", "", title).strip()
+                title = re.sub(r"\s+", " ", title)
+                if len(title) >= 2:
+                    titles.append((title, imdb_match.group(1) if imdb_match else None))
+            if not titles:  # RSS: عنوان‌ها داخل <title>
+                for raw in re.findall(r"<title>\s*(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?\s*</title>", xml_text, re.I | re.S):
+                    raw = raw.strip()
+                    if len(raw) >= 2 and "://" not in raw:
+                        imdb_match = re.search(r"(tt\d{7,9})", raw)
+                        titles.append((raw, imdb_match.group(1) if imdb_match else None))
+            return titles
+
+        try:
+            pairs = titles_from(fetch(url))
+        except Exception:
+            logger.warning("custom discovery source failed: %s", url, exc_info=True)
+            return []
+
+        candidates = []
+        seen = set()
+        for title, imdb_id in pairs[:100]:
+            resolved = None
+            if imdb_id:
+                for media_type, finder in (
+                    ("movie", self.client.find_movie),
+                    ("tv", self.client.find_tv),
+                ):
+                    try:
+                        tmdb_id = finder(imdb_id)
+                    except Exception:
+                        tmdb_id = None
+                    if tmdb_id:
+                        resolved = {
+                            "media_type": media_type,
+                            "tmdb_id": tmdb_id,
+                            "vote_average": 10,
+                            "vote_count": 10 ** 9,
+                        }
+                        break
+            if resolved is None:
+                try:
+                    data = self.client._get(
+                        "search/multi", {"query": title, "language": "en-US"}
+                    )
+                except Exception:
+                    continue
+                for result in data.get("results") or []:
+                    if result.get("media_type") in ("movie", "tv") and result.get("id"):
+                        resolved = {
+                            "media_type": result["media_type"],
+                            "tmdb_id": result["id"],
+                            "vote_average": result.get("vote_average") or 0,
+                            "vote_count": result.get("vote_count") or 0,
+                        }
+                        break
+            if resolved is None:
+                continue
+            if resolved["vote_average"] < self.config.min_rating:
+                continue
+            if resolved["vote_count"] < self.config.min_votes and not imdb_id:
+                continue
+            key = (resolved["media_type"], resolved["tmdb_id"])
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(resolved)
+            if len(candidates) >= limit:
+                break
+        return candidates
+
     # ---------------- کشف ----------------
     def discover(self, sources, limit):
         """کاندیداها: [{media_type, tmdb_id, vote_average, vote_count}]"""
         seen = {}
+        if "custom" in sources:
+            for candidate in self.discover_from_custom_source(limit):
+                seen[(candidate["media_type"], candidate["tmdb_id"])] = candidate
         for source in sources:
+            if source == "custom":
+                continue
             for media_type, endpoint in SOURCE_ENDPOINTS.get(source, []):
                 for page in range(1, MAX_PAGES_PER_SOURCE + 1):
                     try:

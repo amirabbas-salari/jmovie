@@ -13,6 +13,7 @@ const SOURCE_OPTIONS = [
   { value: "new", label: "جدیدترین‌ها" },
   { value: "popular", label: "محبوب‌ترین‌ها" },
   { value: "top_rated", label: "برترین‌های تاریخ" },
+  { value: "custom", label: "منبع سفارشی (سایت من)" },
 ]
 
 export default function Agent() {
@@ -230,6 +231,20 @@ export default function Agent() {
                   ترجمه با AI
                 </label>
               </div>
+              <label className="mt-4 block text-xs text-zinc-400">
+                آدرس منبع کشف سفارشی (sitemap یا RSS سایت شما)
+                <input
+                  type="url"
+                  dir="ltr"
+                  placeholder="https://example.com/sitemap.xml"
+                  value={settings.discovery_source_url || ""}
+                  onChange={(e) => setSettings({ ...settings, discovery_source_url: e.target.value })}
+                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-left text-sm text-zinc-100"
+                />
+                <span className="mt-1 block leading-5 text-zinc-500">
+                  ایجنت فقط عنوان آثار این منبع را می‌خواند تا بفهمد چه چیزی را ندارید؛ اطلاعات کامل از TMDB می‌آید و لینک دانلود از منبع خوانده نمی‌شود (لینک را از پنل روی هر اثر می‌گذارید).
+                </span>
+              </label>
               <button
                 type="button"
                 onClick={saveSettings}

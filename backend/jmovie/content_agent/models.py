@@ -12,6 +12,7 @@ class AgentSettings(models.Model):
         ("new", "جدیدترین‌ها"),
         ("popular", "محبوب‌ترین‌ها"),
         ("top_rated", "برترین‌های تاریخ"),
+        ("custom", "منبع سفارشی (کشف از سایت)"),
     ]
 
     sources = models.JSONField(default=list, help_text="فهرست منابع فعال")
@@ -21,6 +22,14 @@ class AgentSettings(models.Model):
     translate_with_ai = models.BooleanField(
         default=True,
         help_text="ترجمه‌ی عنوان/خلاصه با AI وقتی ترجمه‌ی فارسی در TMDB نیست",
+    )
+    # منبع کشف سفارشی: آدرس sitemap.xml یا RSS یک سایت. ایجنت فقط
+    # «عنوان» آثار را از آن می‌خواند تا بفهمد چه چیزی را ندارد؛ اطلاعات
+    # کامل از TMDB می‌آید. لینک دانلود از منبع خوانده نمی‌شود.
+    discovery_source_url = models.URLField(
+        blank=True,
+        default="",
+        help_text="آدرس sitemap یا RSS سایت منبع برای کشف آثار (فقط عنوان خوانده می‌شود)",
     )
     updated_at = models.DateTimeField(auto_now=True)
 

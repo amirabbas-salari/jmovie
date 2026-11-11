@@ -12,6 +12,7 @@ class AgentSettingsSerializer(serializers.ModelSerializer):
             "min_rating",
             "min_votes",
             "translate_with_ai",
+            "discovery_source_url",
             "updated_at",
         ]
 
