@@ -60,8 +60,16 @@ export const tmdbLookup = async (params) => (await api.get("/admin/tmdb/lookup/"
 // ---------------------------------------------------------------------------
 // منابع محتوا
 // ---------------------------------------------------------------------------
-export const moviesApi = crud("/admin/movies/")
-export const seriesApi = crud("/admin/series/")
+// حذف گروهی + پاکسازی آثار بدون لینک دانلود (مشترک فیلم/سریال)
+const mediaCrud = (path) => ({
+  ...crud(path),
+  bulkDelete: async (ids) => (await api.post(`${path}bulk-delete/`, { ids })).data,
+  withoutDownloadsCount: async () => (await api.get(`${path}without-downloads-count/`)).data,
+  purgeWithoutDownloads: async () => (await api.post(`${path}purge-without-downloads/`)).data,
+})
+
+export const moviesApi = mediaCrud("/admin/movies/")
+export const seriesApi = mediaCrud("/admin/series/")
 export const seasonsApi = crud("/admin/seasons/")
 export const episodesApi = crud("/admin/episodes/")
 export const peopleApi = crud("/admin/people/")

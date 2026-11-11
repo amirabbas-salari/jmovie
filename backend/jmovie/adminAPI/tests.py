@@ -187,3 +187,77 @@ class AdminVipEscalationTest(TestCase):
         self.assertEqual(res.status_code, 200)
         self.target.refresh_from_db()
         self.assertTrue(self.target.is_vip)
+
+
+class AdminBulkDeleteTest(TestCase):
+    """حذف گروهی و پاکسازی آثار بدون لینک دانلود."""
+
+    def setUp(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+        from series.models import Episode, Season
+
+        self.client = APIClient()
+        self.superadmin = make_user("bulkroot", is_staff=True, is_superuser=True)
+        self.deleter = make_user("deleter", is_staff=True)
+        role = Group.objects.create(name="حذف‌کننده")
+        role.permissions.set(Permission.objects.filter(
+            codename__in=["view_movie", "delete_movie", "view_series", "delete_series"],
+        ))
+        self.deleter.groups.add(role)
+
+        self.m1 = Movie.objects.create(title="فیلم ۱", imdb_id="tt1000001", runtime=90)
+        self.m2 = Movie.objects.create(title="فیلم ۲", imdb_id="tt1000002", runtime=90)
+        movie_ct = ContentType.objects.get_for_model(Movie)
+        Download.objects.create(
+            content_type=movie_ct, object_id=self.m1.id,
+            quality="1080p", url="https://dl.example.com/a.mkv",
+        )
+        # سریال بدون فصل/لینک و سریالی که قسمتش لینک دارد
+        from series.models import Series
+        self.s_empty = Series.objects.create(title="سریال خالی", imdb_id="tt1000003")
+        self.s_full = Series.objects.create(title="سریال دارای لینک", imdb_id="tt1000004")
+        season = Season.objects.create(series=self.s_full, season_number=1)
+        episode = Episode.objects.create(season=season, episode_number=1)
+        ep_ct = ContentType.objects.get_for_model(Episode)
+        Download.objects.create(
+            content_type=ep_ct, object_id=episode.id,
+            quality="720p", url="https://dl.example.com/ep.mkv",
+        )
+
+    def test_bulk_delete_requires_delete_permission(self):
+        viewer_only = make_user("vieweronly", is_staff=True)
+        role = Group.objects.create(name="فقط مشاهده")
+        role.permissions.set(Permission.objects.filter(codename__in=["view_movie"]))
+        viewer_only.groups.add(role)
+        self.client.force_authenticate(user=viewer_only)
+        res = self.client.post("/admin/movies/bulk-delete/", {"ids": [self.m1.id]}, format="json")
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(Movie.objects.filter(id=self.m1.id).exists())
+
+    def test_bulk_delete_movies(self):
+        self.client.force_authenticate(user=self.deleter)
+        res = self.client.post("/admin/movies/bulk-delete/", {"ids": [self.m1.id, self.m2.id]}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["deleted"], 2)
+        self.assertEqual(Movie.objects.count(), 0)
+
+    def test_purge_without_downloads_movies(self):
+        self.client.force_authenticate(user=self.superadmin)
+        count = self.client.get("/admin/movies/without-downloads-count/")
+        self.assertEqual(count.data["count"], 1)  # فقط m2
+        res = self.client.post("/admin/movies/purge-without-downloads/")
+        self.assertEqual(res.data["deleted"], 1)
+        self.assertTrue(Movie.objects.filter(id=self.m1.id).exists())
+        self.assertFalse(Movie.objects.filter(id=self.m2.id).exists())
+
+    def test_purge_series_keeps_series_with_episode_downloads(self):
+        self.client.force_authenticate(user=self.superadmin)
+        count = self.client.get("/admin/series/without-downloads-count/")
+        self.assertEqual(count.data["count"], 1)  # فقط سریال خالی
+        res = self.client.post("/admin/series/purge-without-downloads/")
+        self.assertEqual(res.data["deleted"], 1)
+        from series.models import Series
+        self.assertTrue(Series.objects.filter(id=self.s_full.id).exists())
+        self.assertFalse(Series.objects.filter(id=self.s_empty.id).exists())

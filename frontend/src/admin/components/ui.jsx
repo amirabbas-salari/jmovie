@@ -212,7 +212,7 @@ export function useAdminList(fetcher, deps = []) {
     return () => { alive = false }
   }, [load])
 
-  return { items, setItems, total, loading, error, search, setSearch, page, setPage, pageSize, reload: load }
+  return { items, setItems, total, setTotal, loading, error, search, setSearch, page, setPage, pageSize, reload: load }
 }
 
 export const formatNumber = (n) => new Intl.NumberFormat("fa-IR").format(Number(n || 0))
