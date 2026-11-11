@@ -326,21 +326,64 @@ class TmdbLookupView(APIView):
 class MediaBulkActionsMixin:
     """حذف گروهی و پاکسازی «بدون لینک دانلود» برای فیلم/سریال.
 
-    برای سریال، دانلودهای قسمت‌ها (از مسیر فصل‌ها) هم حساب می‌شوند تا
-    سریالی که قسمت‌هایش لینک دارند اشتباهی «بدون لینک» تشخیص داده نشود.
+    تشخیص «داشتن لینک» با زیرپرس‌وجوهای Exists انجام می‌شود (نه شمارش
+    روی جوین‌ها) تا در هر دیتابیسی و با هر حجمی از فصل/قسمت دقیق باشد.
+    برای سریال، هر سه جای ممکنِ نشستن لینک شمرده می‌شود:
+      ۱) روی خود سریال  ۲) روی فصل‌ها  ۳) روی تک‌تک قسمت‌ها
+    چون در عمل لینک‌های سریال روی قسمت‌ها هستند؛ اگر حتی یک قسمت از
+    یک فصل لینک داشته باشد، سریال «دارای لینک» است و حذف نمی‌شود.
     """
 
     media_is_series = False
 
     def _without_downloads_qs(self):
-        qs = self.get_queryset() if hasattr(self, "get_queryset") else self.queryset
-        qs = qs.annotate(_dl_count=Count("downloads", distinct=True))
+        from django.db.models import Exists, OuterRef
+
+        model = self.queryset.model
+        qs = self.get_queryset()
+
+        def ct_of(m):
+            return ContentType.objects.get_for_model(m)
+
+        # لینک مستقیم روی خود اثر (فیلم یا سریال) — یک سطح OuterRef
+        qs = qs.exclude(
+            Exists(
+                Download.objects.filter(
+                    content_type=ct_of(model), object_id=OuterRef("pk")
+                )
+            )
+        )
+
         if self.media_is_series:
-            qs = qs.annotate(
-                _ep_dl_count=Count("seasons__episodes__downloads", distinct=True)
-            ).filter(_dl_count=0, _ep_dl_count=0)
-        else:
-            qs = qs.filter(_dl_count=0)
+            from series.models import Episode, Season
+
+            # لینک روی قسمت‌ها — مسیر اصلی لینک‌های سریال. Exists توکار:
+            # «قسمتی از این سریال هست که آیدی‌اش در object_id دانلودها باشد».
+            # (OuterRef دومرحله‌ای عمداً استفاده نشده؛ در زیرپرس‌وجوی تو
+            # در تو به pk اشتباه اشاره می‌کند و تشخیص را خراب می‌کند.)
+            qs = qs.exclude(
+                Exists(
+                    Episode.objects.filter(
+                        season__series=OuterRef("pk"),
+                        pk__in=Download.objects.filter(
+                            content_type=ct_of(Episode)
+                        ).values("object_id"),
+                    )
+                )
+            )
+
+            # لینک روی فصل‌ها (داده‌های قدیمی ممکن است این‌طور ثبت شده باشند)
+            qs = qs.exclude(
+                Exists(
+                    Season.objects.filter(
+                        series=OuterRef("pk"),
+                        pk__in=Download.objects.filter(
+                            content_type=ct_of(Season)
+                        ).values("object_id"),
+                    )
+                )
+            )
+
         return qs
 
     @action(detail=False, methods=["post"], url_path="bulk-delete")
@@ -362,6 +405,23 @@ class MediaBulkActionsMixin:
     def without_downloads_count(self, request):
         return Response({"count": self._without_downloads_qs().count()})
 
+    @action(detail=False, methods=["get"], url_path="without-downloads")
+    def without_downloads(self, request):
+        """پیش‌نمایش دقیق آثاری که «بدون لینک» تشخیص داده شده‌اند، تا
+        ادمین قبل از حذف ببیند چه چیزهایی قرار است پاک شوند."""
+        qs = self._without_downloads_qs()
+        total = qs.count()
+        items = [
+            {
+                "id": obj.id,
+                "title": obj.title,
+                "original_title": obj.original_title or "",
+                "year": getattr(obj, "year", None),
+            }
+            for obj in qs[:500]
+        ]
+        return Response({"count": total, "results": items})
+
     @action(detail=False, methods=["post"], url_path="purge-without-downloads")
     def purge_without_downloads(self, request):
         qs = self._without_downloads_qs()
@@ -377,6 +437,7 @@ class AdminMovieViewSet(MediaBulkActionsMixin, AdminModelViewSet):
         "bulk_delete": "movies.delete_movie",
         "purge_without_downloads": "movies.delete_movie",
         "without_downloads_count": "movies.view_movie",
+        "without_downloads": "movies.view_movie",
     }
     queryset = Movie.objects.all().order_by("-updated_at")
     serializer_class = AdminMovieSerializer
@@ -410,6 +471,7 @@ class AdminSeriesViewSet(MediaBulkActionsMixin, AdminModelViewSet):
         "bulk_delete": "series.delete_series",
         "purge_without_downloads": "series.delete_series",
         "without_downloads_count": "series.view_series",
+        "without_downloads": "series.view_series",
     }
     queryset = Series.objects.all().order_by("-updated_at")
     serializer_class = AdminSeriesSerializer

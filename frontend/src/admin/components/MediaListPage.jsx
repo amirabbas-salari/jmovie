@@ -92,11 +92,14 @@ export default function MediaListPage({ title, subtitle, basePath, api, perms, k
     }
   }
 
+  const [purgeItems, setPurgeItems] = useState([])
+
   const startPurge = async () => {
     setActionError("")
     try {
-      const res = await api.withoutDownloadsCount()
+      const res = await api.withoutDownloads()
       setPurgeCount(res.count)
+      setPurgeItems(res.results || [])
       setConfirmPurge(true)
     } catch (err) {
       setActionError(getApiError(err))
@@ -255,18 +258,62 @@ export default function MediaListPage({ title, subtitle, basePath, api, perms, k
       )}
 
       {confirmPurge && (
-        <ConfirmModal
-          title={`حذف ${kindLabel}های بدون لینک دانلود`}
-          message={
-            purgeCount === 0
-              ? `هیچ ${kindLabel}ی بدون لینک دانلود پیدا نشد.`
-              : `${formatNumber(purgeCount)} ${kindLabel} هیچ لینک دانلودی ندارند و همراه با اطلاعات وابسته‌شان حذف می‌شوند. این عمل قابل بازگشت نیست. ادامه می‌دهید؟`
-          }
-          loading={busy}
-          confirmLabel={purgeCount === 0 ? "بستن" : "حذف همه"}
-          onCancel={() => setConfirmPurge(false)}
-          onConfirm={purgeCount === 0 ? () => setConfirmPurge(false) : confirmPurgeAction}
-        />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={busy ? undefined : () => setConfirmPurge(false)} />
+          <div className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
+            <h3 className="mb-2 font-bold text-zinc-100">
+              حذف {kindLabel}های بدون لینک دانلود
+            </h3>
+            {purgeCount === 0 ? (
+              <p className="mb-6 text-sm text-zinc-400">
+                هیچ {kindLabel}ی بدون لینک دانلود پیدا نشد. (لینک‌های روی قسمت‌ها و فصل‌های سریال هم حساب شده‌اند.)
+              </p>
+            ) : (
+              <>
+                <p className="mb-3 text-sm leading-6 text-zinc-400">
+                  {formatNumber(purgeCount)} {kindLabel} زیر هیچ لینک دانلودی ندارند
+                  (نه روی خودشان، نه فصل‌ها و نه قسمت‌ها) و با همه‌ی اطلاعات وابسته حذف می‌شوند.
+                  این عمل قابل بازگشت نیست:
+                </p>
+                <ul className="mb-5 flex-1 space-y-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/30 p-3 text-sm">
+                  {purgeItems.map((m) => (
+                    <li key={m.id} className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-zinc-200">{m.title}</span>
+                      <span className="shrink-0 text-[11px] text-zinc-500" dir="ltr">
+                        {m.original_title}{m.year ? ` (${m.year})` : ""}
+                      </span>
+                    </li>
+                  ))}
+                  {purgeCount > purgeItems.length && (
+                    <li className="pt-1 text-[11px] text-zinc-500">
+                      و {formatNumber(purgeCount - purgeItems.length)} مورد دیگر…
+                    </li>
+                  )}
+                </ul>
+              </>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmPurge(false)}
+                disabled={busy}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/10 disabled:opacity-50"
+              >
+                انصراف
+              </button>
+              {purgeCount > 0 && (
+                <button
+                  type="button"
+                  onClick={confirmPurgeAction}
+                  disabled={busy}
+                  className="flex-1 rounded-xl bg-red-500/85 py-2.5 text-sm font-bold text-white transition hover:bg-red-500 disabled:opacity-50"
+                >
+                  {busy ? "در حال حذف..." : `حذف ${formatNumber(purgeCount)} مورد`}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
