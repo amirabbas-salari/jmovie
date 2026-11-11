@@ -106,6 +106,7 @@ LOCAL_APPS = [
     'search.apps.SearchConfig',
     'collection.apps.CollectionConfig',
     'ai.apps.AiConfig',
+    'content_agent.apps.ContentAgentConfig',
 ]
 
 

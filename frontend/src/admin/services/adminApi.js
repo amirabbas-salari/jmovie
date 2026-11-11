@@ -83,6 +83,17 @@ export const usersApi = {
 export const rolesApi = crud("/admin/roles/")
 export const auditLogsApi = crud("/admin/audit-logs/")
 
+// ایجنت محتوا (آوردن خودکار فیلم/سریال از TMDB)
+export const agentApi = {
+  getSettings: async () => (await api.get("/agent/settings/")).data,
+  updateSettings: async (payload) => (await api.patch("/agent/settings/", payload)).data,
+  run: async (payload = {}) => (await api.post("/agent/run/", payload)).data,
+  runs: async () => (await api.get("/agent/runs/")).data,
+  drafts: async (params = {}) => (await api.get("/agent/drafts/", { params })).data,
+  act: async (id, action) => (await api.post(`/agent/drafts/${id}/${action}/`)).data,
+  bulk: async (ids, action) => (await api.post("/agent/drafts/bulk/", { ids, action })).data,
+}
+
 // سازگاری با نام‌های قدیمی (اگر جایی هنوز استفاده شوند)
 export const getAdminMovies = (params) => moviesApi.list(params)
 export const getAdminSeries = (params) => seriesApi.list(params)

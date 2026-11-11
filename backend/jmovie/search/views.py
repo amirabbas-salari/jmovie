@@ -22,6 +22,7 @@ MEDIA_SEARCH_LIMIT = 50
 def _movie_matches(q):
     return (
         Movie.objects.filter(
+            Q(is_active=True),
             Q(title__icontains=q)
             | Q(original_title__icontains=q)
             | Q(imdb_id__icontains=q)
@@ -33,6 +34,7 @@ def _movie_matches(q):
 def _series_matches(q):
     return (
         Series.objects.filter(
+            Q(is_active=True),
             Q(title__icontains=q)
             | Q(original_title__icontains=q)
             | Q(imdb_id__icontains=q)

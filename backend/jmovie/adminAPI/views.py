@@ -134,7 +134,7 @@ class AdminPermissionCatalogView(APIView):
 
     def get(self, request):
         admin_apps = ["movies", "series", "genres", "people", "collection",
-                      "downloads", "comments", "accounts", "adminAPI"]
+                      "downloads", "comments", "accounts", "adminAPI", "content_agent"]
         perms = (
             Permission.objects.select_related("content_type")
             .filter(content_type__app_label__in=admin_apps)

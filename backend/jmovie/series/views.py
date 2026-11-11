@@ -48,7 +48,9 @@ class SeriesViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-start_date"]
 
     def get_queryset(self):
-        qs = super().get_queryset().prefetch_related("genres")
+        # پیش‌نویس‌ها (is_active=False — مثلاً واردشده‌های در انتظار تأیید
+        # ایجنت محتوا) هرگز نباید در سایت عمومی دیده شوند.
+        qs = super().get_queryset().filter(is_active=True).prefetch_related("genres")
 
         if self.action == "list":
             # فقط ستون‌های لازم کارت (year از start_date ساخته می‌شود)
