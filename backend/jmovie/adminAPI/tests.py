@@ -297,3 +297,65 @@ class AdminMediaRetrieveTest(TestCase):
         res = self.client.get(f"/admin/movies/{movie.id}/")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(len(res.data["cast"]), 1)
+
+
+class AdminSeriesWithoutDownloadsDetectionTest(TestCase):
+    """تشخیص «بدون لینک» سریال باید لینک قسمت‌ها و فصل‌ها را هم ببیند."""
+
+    def setUp(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+        from series.models import Episode, Season, Series
+
+        self.Download = Download
+        self.Episode = Episode
+        self.Season = Season
+        self.Series = Series
+        self.ct = ContentType.objects.get_for_model
+
+        self.client = APIClient()
+        self.client.force_authenticate(
+            user=make_user("detector", is_staff=True, is_superuser=True)
+        )
+
+    def _series(self, title, imdb):
+        return self.Series.objects.create(title=title, imdb_id=imdb)
+
+    def _dl(self, model, obj_id):
+        return self.Download.objects.create(
+            content_type=self.ct(model), object_id=obj_id,
+            quality="720p", url="https://dl.example.com/x.mkv",
+        )
+
+    def _preview_titles(self):
+        res = self.client.get("/admin/series/without-downloads/")
+        self.assertEqual(res.status_code, 200)
+        return res.data, [r["title"] for r in res.data["results"]]
+
+    def test_episode_download_in_second_season_counts(self):
+        s = self._series("لینک فصل دوم", "tt4000001")
+        season1 = self.Season.objects.create(series=s, season_number=1)
+        season1.episodes.create(episode_number=1)
+        season2 = self.Season.objects.create(series=s, season_number=2)
+        ep = season2.episodes.create(episode_number=1)
+        self._dl(self.Episode, ep.id)
+        _, titles = self._preview_titles()
+        self.assertNotIn("لینک فصل دوم", titles)
+
+    def test_season_attached_download_counts(self):
+        s = self._series("لینک روی فصل", "tt4000002")
+        season = self.Season.objects.create(series=s, season_number=1)
+        season.episodes.create(episode_number=1)
+        self._dl(self.Season, season.id)
+        _, titles = self._preview_titles()
+        self.assertNotIn("لینک روی فصل", titles)
+
+    def test_series_with_episodes_but_no_links_is_detected(self):
+        s = self._series("قسمت بدون لینک", "tt4000003")
+        season = self.Season.objects.create(series=s, season_number=1)
+        season.episodes.create(episode_number=1)
+        season.episodes.create(episode_number=2)
+        data, titles = self._preview_titles()
+        self.assertIn("قسمت بدون لینک", titles)
+        self.assertEqual(data["count"], 1)

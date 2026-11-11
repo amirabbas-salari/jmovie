@@ -65,6 +65,7 @@ const mediaCrud = (path) => ({
   ...crud(path),
   bulkDelete: async (ids) => (await api.post(`${path}bulk-delete/`, { ids })).data,
   withoutDownloadsCount: async () => (await api.get(`${path}without-downloads-count/`)).data,
+  withoutDownloads: async () => (await api.get(`${path}without-downloads/`)).data,
   purgeWithoutDownloads: async () => (await api.post(`${path}purge-without-downloads/`)).data,
 })
 
