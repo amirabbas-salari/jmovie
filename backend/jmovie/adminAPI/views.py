@@ -17,7 +17,7 @@ from downloads.models import Download
 from genres.models import Genre
 from movies.models import Movie, MovieCast
 from people.models import Person
-from series.models import Episode, Season, Series
+from series.models import Episode, Season, Series, SeriesCast
 
 from movies.services.tmdb import TMDBClient
 

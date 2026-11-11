@@ -261,3 +261,39 @@ class AdminBulkDeleteTest(TestCase):
         from series.models import Series
         self.assertTrue(Series.objects.filter(id=self.s_full.id).exists())
         self.assertFalse(Series.objects.filter(id=self.s_empty.id).exists())
+
+
+class AdminMediaRetrieveTest(TestCase):
+    """رگرسیون: ویرایش سریال در پنل با NameError: SeriesCast خراب بود."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.superadmin = make_user("editor", is_staff=True, is_superuser=True)
+        self.client.force_authenticate(user=self.superadmin)
+
+    def test_series_detail_loads_with_cast(self):
+        from people.models import Person
+        from series.models import Series, SeriesCast
+
+        person = Person.objects.create(tmdb_id="9001", name="بازیگر تست")
+        series = Series.objects.create(title="سریال تست", imdb_id="tt9000001")
+        SeriesCast.objects.create(
+            series=series, person=person, role="actor", character_name="نقش اول"
+        )
+        res = self.client.get(f"/admin/series/{series.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["title"], "سریال تست")
+        self.assertEqual(len(res.data["cast"]), 1)
+
+    def test_movie_detail_loads_with_cast(self):
+        from movies.models import MovieCast
+        from people.models import Person
+
+        person = Person.objects.create(tmdb_id="9002", name="بازیگر فیلم")
+        movie = Movie.objects.create(title="فیلم تست", imdb_id="tt9000002", runtime=95)
+        MovieCast.objects.create(
+            movie=movie, person=person, role="actor", character_name="قهرمان"
+        )
+        res = self.client.get(f"/admin/movies/{movie.id}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data["cast"]), 1)
