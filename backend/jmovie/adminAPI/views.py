@@ -340,7 +340,10 @@ class MediaBulkActionsMixin:
         from django.db.models import Exists, OuterRef
 
         model = self.queryset.model
-        qs = self.get_queryset()
+        # عمداً از self.queryset خام استفاده می‌شود، نه get_queryset():
+        # overrideهای لیست/جزئیات (prefetch ژانرها، annotate و .only) برای
+        # این اکشن‌ها لازم نیستند و روی داده‌ی حجیم پاسخ را کند می‌کنند.
+        qs = self.queryset.all()
 
         def ct_of(m):
             return ContentType.objects.get_for_model(m)
@@ -386,6 +389,32 @@ class MediaBulkActionsMixin:
 
         return qs
 
+    def _bulk_log_deletes(self, request, rows):
+        """ثبت لاگ حذف برای چند آیتم با «یک» کوئری (bulk_create)؛ مثل _log
+        خطای لاگ نباید جلوی عملیات اصلی را بگیرد."""
+        if not rows:
+            return
+        model_label = self.queryset.model._meta.label_lower
+        try:
+            AdminAuditLog.objects.bulk_create(
+                [
+                    AdminAuditLog(
+                        user=request.user if request.user.is_authenticated else None,
+                        username=getattr(request.user, "username", ""),
+                        action=AdminAuditLog.ACTION_DELETE,
+                        model_label=model_label,
+                        object_id=str(obj_id),
+                        object_repr=str(title)[:255],
+                        changes={},
+                        ip_address=_client_ip(request),
+                    )
+                    for obj_id, title in rows
+                ],
+                batch_size=500,
+            )
+        except Exception:
+            pass
+
     @action(detail=False, methods=["post"], url_path="bulk-delete")
     def bulk_delete(self, request):
         ids = request.data.get("ids")
@@ -394,12 +423,10 @@ class MediaBulkActionsMixin:
                 {"ids": "فهرست آیدی‌ها (ids) لازم است."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        qs = self.queryset.filter(id__in=ids)
-        items = list(qs)
-        for item in items:
-            self._log(request, AdminAuditLog.ACTION_DELETE, item)
-        qs.delete()
-        return Response({"deleted": len(items)})
+        rows = list(self.queryset.filter(id__in=ids).values_list("id", "title"))
+        self._bulk_log_deletes(request, rows)
+        self.queryset.filter(id__in=[r[0] for r in rows]).delete()
+        return Response({"deleted": len(rows)})
 
     @action(detail=False, methods=["get"], url_path="without-downloads-count")
     def without_downloads_count(self, request):
@@ -410,26 +437,49 @@ class MediaBulkActionsMixin:
         """پیش‌نمایش دقیق آثاری که «بدون لینک» تشخیص داده شده‌اند، تا
         ادمین قبل از حذف ببیند چه چیزهایی قرار است پاک شوند."""
         qs = self._without_downloads_qs()
-        total = qs.count()
-        items = [
-            {
-                "id": obj.id,
-                "title": obj.title,
-                "original_title": obj.original_title or "",
-                "year": getattr(obj, "year", None),
-            }
-            for obj in qs[:500]
-        ]
-        return Response({"count": total, "results": items})
+        # values() سبک: بدون ساخت آبجکت کامل و بدون prefetch؛ سال سریال از
+        # start_date می‌آید (year روی سریال property است، روی فیلم فیلد).
+        # ۵۰۱ ردیف خوانده می‌شود: اگر همه‌ی موارد ≤۵۰۰ بود، همان طولِ لیست
+        # تعداد کل است و اسکن دومِ count() روی جدول‌های بزرگ اجرا نمی‌شود.
+        if self.media_is_series:
+            rows = list(qs.values("id", "title", "original_title", "start_date")[:501])
+
+            def to_item(row):
+                return {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "original_title": row["original_title"] or "",
+                    "year": row["start_date"].year if row["start_date"] else None,
+                }
+        else:
+            rows = list(qs.values("id", "title", "original_title", "year")[:501])
+
+            def to_item(row):
+                return {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "original_title": row["original_title"] or "",
+                    "year": row["year"],
+                }
+
+        if len(rows) <= 500:
+            total = len(rows)
+        else:
+            total = qs.count()
+            rows = rows[:500]
+        return Response({"count": total, "results": [to_item(r) for r in rows]})
 
     @action(detail=False, methods=["post"], url_path="purge-without-downloads")
     def purge_without_downloads(self, request):
-        qs = self._without_downloads_qs()
-        items = list(qs)
-        for item in items:
-            self._log(request, AdminAuditLog.ACTION_DELETE, item)
-        qs.delete()
-        return Response({"deleted": len(items)})
+        # فقط id+title خوانده می‌شود (نه آبجکت‌های کامل با رابطه‌ها) و لاگ‌ها
+        # گروهی نوشته می‌شوند؛ روی هزاران آیتمِ بدون لینک، نسخه‌ی قبلی به‌ازای
+        # هر آیتم یک INSERT جدا می‌زد و پاسخ آن‌قدر طول می‌کشید که درخواست
+        # timeout می‌شد و دکمه در فرانت «مرده» به نظر می‌رسید.
+        rows = list(self._without_downloads_qs().values_list("id", "title"))
+        self._bulk_log_deletes(request, rows)
+        if rows:
+            self.queryset.filter(id__in=[r[0] for r in rows]).delete()
+        return Response({"deleted": len(rows)})
 
 
 class AdminMovieViewSet(MediaBulkActionsMixin, AdminModelViewSet):

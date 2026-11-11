@@ -61,12 +61,15 @@ export const tmdbLookup = async (params) => (await api.get("/admin/tmdb/lookup/"
 // منابع محتوا
 // ---------------------------------------------------------------------------
 // حذف گروهی + پاکسازی آثار بدون لینک دانلود (مشترک فیلم/سریال)
+// برای این سه اکشن timeout صریح می‌گذاریم: روی داده‌ی حجیم ممکن است پاسخ
+// چند ثانیه طول بکشد و بدون timeout، هنگِ سرور/شبکه در فرانت به‌صورت
+// «دکمه هیچ کاری نمی‌کند» دیده می‌شود؛ با timeout خطا واضح نمایش داده می‌شود.
 const mediaCrud = (path) => ({
   ...crud(path),
-  bulkDelete: async (ids) => (await api.post(`${path}bulk-delete/`, { ids })).data,
-  withoutDownloadsCount: async () => (await api.get(`${path}without-downloads-count/`)).data,
-  withoutDownloads: async () => (await api.get(`${path}without-downloads/`)).data,
-  purgeWithoutDownloads: async () => (await api.post(`${path}purge-without-downloads/`)).data,
+  bulkDelete: async (ids) => (await api.post(`${path}bulk-delete/`, { ids }, { timeout: 120000 })).data,
+  withoutDownloadsCount: async () => (await api.get(`${path}without-downloads-count/`, { timeout: 120000 })).data,
+  withoutDownloads: async () => (await api.get(`${path}without-downloads/`, { timeout: 120000 })).data,
+  purgeWithoutDownloads: async () => (await api.post(`${path}purge-without-downloads/`, {}, { timeout: 300000 })).data,
 })
 
 export const moviesApi = mediaCrud("/admin/movies/")
