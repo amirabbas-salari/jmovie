@@ -7,7 +7,7 @@ import svgr from "vite-plugin-svgr";
 // در production مقدار VITE_API_BASE_URL از محیط خوانده می‌شود.
 const API_PROXY = Object.fromEntries(
   ["/admin", "/accounts", "/movies", "/series", "/genres", "/comments",
-   "/people", "/collections", "/search", "/ai", "/api", "/media", "/agent"]
+   "/people", "/collections", "/search", "/ai", "/api", "/media", "/agent", "/support"]
     .map((path) => [path, { target: "http://localhost:8000", changeOrigin: true }])
 );
 

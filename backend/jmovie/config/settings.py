@@ -154,6 +154,8 @@ REST_FRAMEWORK = {
         # چت هوش مصنوعی برای مهمان هم باز است و به API پولی وصل می‌شود؛
         # بدون سقف، هرکسی می‌توانست هزینه‌ی نامحدود روی دست سایت بگذارد.
         "ai_chat": "60/hour",
+        # فرم‌های عمومی صفحه‌ی حمایت/پشتیبانی؛ سقف روی IP ضد اسپم است.
+        "support": "10/hour",
     },
     
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.StandardResultsSetPagination',
@@ -377,6 +379,29 @@ TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")  # کلید قبلی داخل گی�
 # خودتان استفاده می‌کنید فقط همین متغیر محیطی را عوض کنید؛ سایز تصویر
 # (w500/w1280/original/...) به انتهای آن اضافه می‌شود.
 TMDB_IMAGE_BASE_URL = os.getenv("TMDB_IMAGE_BASE_URL", "https://image.tmdb.org/t/p/").rstrip("/") + "/"
+
+
+# ---------------------------------------------------------------------------
+# اعلان پیام‌های پشتیبانی (صفحه‌ی حمایت از ما) — core/notify.py
+# ---------------------------------------------------------------------------
+# تلگرام: توکن بات (@BotFather) و آیدی چت مقصد؛ خالی یعنی غیرفعال.
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+# ایمیلی که پیام‌های پشتیبانی برایش فرستاده می‌شود؛ خالی یعنی ارسال ایمیل غیرفعال.
+SUPPORT_NOTIFICATION_EMAIL = os.getenv("SUPPORT_NOTIFICATION_EMAIL", "")
+
+# ایمیل خروجی جنگو: اگر EMAIL_HOST ست شود SMTP فعال می‌شود، وگرنه ایمیل‌ها
+# فقط در کنسول/لاگ سرور چاپ می‌شوند (برای توسعه).
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+if EMAIL_HOST:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "MovieVerse <no-reply@localhost>")
 
 
 # ---------------------------------------------------------------------------
