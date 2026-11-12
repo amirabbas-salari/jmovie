@@ -153,6 +153,53 @@ class TmdbLookupTest(TestCase):
         self.assertIsNotNone(cast["500"]["local_id"])
         self.assertEqual(cast["501"]["role"], "director")
 
+    def test_lookup_returns_up_to_5_gallery_images(self):
+        self.client.force_authenticate(user=self.superadmin)
+        fake_data = {
+            "id": 27205, "title": "Inception", "original_title": "Inception",
+            "overview": "", "release_date": "2010-07-16", "runtime": 148,
+            "vote_average": 8.4, "vote_count": 100,
+            "poster_path": "/p.jpg", "backdrop_path": "/b.jpg",
+            "production_countries": [], "external_ids": {"imdb_id": "tt1375666"},
+            "genres": [], "credits": {"cast": [], "crew": []},
+            "images": {
+                "backdrops": [
+                    {"file_path": f"/bd{i}.jpg", "vote_average": i} for i in range(7)
+                ],
+                "posters": [{"file_path": "/pp.jpg", "vote_average": 9}],
+            },
+        }
+        with override_settings(TMDB_API_KEY="test-key"), \
+                patch("adminAPI.views.TMDBClient") as MockClient:
+            MockClient.return_value.movie_full_details.return_value = fake_data
+            resp = self.client.get("/admin/tmdb/lookup/", {"type": "movie", "by": "tmdb_id", "value": "27206"})
+        self.assertEqual(resp.status_code, 200)
+        gallery = resp.data["gallery_images"]
+        self.assertEqual(len(gallery), 5)  # سقف ۵ تصویر
+        # بهترین امتیاز اول می‌آید (bd6 بالاترین vote_average را دارد)
+        self.assertTrue(gallery[0].endswith("/bd6.jpg"))
+
+    def test_lookup_uses_configured_image_base_url(self):
+        self.client.force_authenticate(user=self.superadmin)
+        fake_data = {
+            "id": 27205, "title": "Inception", "original_title": "Inception",
+            "overview": "", "release_date": "2010-07-16", "runtime": 148,
+            "vote_average": 8.4, "vote_count": 100,
+            "poster_path": "/p.jpg", "backdrop_path": "/b.jpg",
+            "production_countries": [], "external_ids": {"imdb_id": "tt1375666"},
+            "genres": [], "credits": {"cast": [], "crew": []},
+            "images": {"backdrops": [{"file_path": "/bd.jpg", "vote_average": 5}]},
+        }
+        with override_settings(
+            TMDB_API_KEY="test-key",
+            TMDB_IMAGE_BASE_URL="https://cdn.example.com/t/p/",
+        ), patch("adminAPI.views.TMDBClient") as MockClient:
+            MockClient.return_value.movie_full_details.return_value = fake_data
+            resp = self.client.get("/admin/tmdb/lookup/", {"type": "movie", "by": "tmdb_id", "value": "27207"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data["poster_url"].startswith("https://cdn.example.com/t/p/w500"))
+        self.assertEqual(resp.data["gallery_images"], ["https://cdn.example.com/t/p/w1280/bd.jpg"])
+
 
 class AdminVipEscalationTest(TestCase):
     """ادمین عادی (حتی با مجوز ویرایش کاربر) نباید بتواند کسی را VIP کند."""
@@ -405,3 +452,187 @@ class AdminSeriesWithoutDownloadsDetectionTest(TestCase):
         )
         data, _ = self._preview_titles()
         self.assertEqual(data["results"][0]["year"], 2021)
+
+
+class AdminImportExportTest(TestCase):
+    """اکسپورت/ایمپورت JSON فیلم و سریال از پنل مدیریت."""
+
+    def setUp(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+        from series.models import Episode, Series
+
+        self.client = APIClient()
+        self.superadmin = make_user("exporter", is_staff=True, is_superuser=True)
+        self.movie = Movie.objects.create(
+            title="فیلم خروجی", imdb_id="tt8000001", runtime=100,
+            poster_url="https://img.example.com/p.jpg",
+        )
+        self.genre = Genre.objects.create(name="اکشن", slug="action", tmdb_id=28)
+        self.movie.genres.add(self.genre)
+        from movies.models import MovieGalleryImage
+
+        MovieGalleryImage.objects.create(
+            movie=self.movie, image_url="https://img.example.com/g1.jpg", order=0
+        )
+        Download.objects.create(
+            content_type=ContentType.objects.get_for_model(Movie),
+            object_id=self.movie.id,
+            quality="1080p", url="https://dl.example.com/m.mkv",
+        )
+        self.series = Series.objects.create(title="سریال خروجی", imdb_id="tt8000002")
+        from series.models import Season
+
+        season = Season.objects.create(series=self.series, season_number=1)
+        ep = season.episodes.create(episode_number=1, title="قسمت اول")
+        Download.objects.create(
+            content_type=ContentType.objects.get_for_model(Episode),
+            object_id=ep.id, quality="720p", url="https://dl.example.com/ep.mkv",
+        )
+
+    def auth(self, user=None):
+        self.client.force_authenticate(user=user or self.superadmin)
+
+    # --- خروجی ---
+    def test_export_movie_includes_genres_gallery_downloads(self):
+        self.auth()
+        res = self.client.get("/admin/movies/export/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["type"], "movie")
+        self.assertEqual(res.data["count"], 1)
+        item = res.data["items"][0]
+        self.assertEqual(item["imdb_id"], "tt8000001")
+        self.assertEqual(item["genres"][0]["tmdb_id"], 28)
+        self.assertEqual(item["gallery"][0]["image_url"], "https://img.example.com/g1.jpg")
+        self.assertEqual(item["downloads"][0]["quality"], "1080p")
+
+    def test_export_series_includes_seasons_episodes_downloads(self):
+        self.auth()
+        res = self.client.get("/admin/series/export/")
+        self.assertEqual(res.status_code, 200)
+        item = res.data["items"][0]
+        self.assertEqual(item["seasons"][0]["season_number"], 1)
+        ep = item["seasons"][0]["episodes"][0]
+        self.assertEqual(ep["episode_number"], 1)
+        self.assertEqual(ep["downloads"][0]["url"], "https://dl.example.com/ep.mkv")
+
+    def test_export_can_filter_by_ids(self):
+        self.auth()
+        res = self.client.get("/admin/movies/export/", {"ids": "999999"})
+        self.assertEqual(res.data["count"], 0)
+
+    # --- ورودی: فیلم ---
+    def test_import_creates_movie_with_all_parts(self):
+        self.auth()
+        payload = {
+            "type": "movie",
+            "items": [{
+                "title": "فیلم وارداتی", "imdb_id": "tt8000010", "runtime": 95,
+                "release_date": "2020-01-02",
+                "poster_url": "https://img.example.com/new.jpg",
+                "genres": [{"name": "درام", "tmdb_id": 18}],
+                "cast": [{"tmdb_id": "777", "name": "بازیگر وارداتی", "role": "actor",
+                          "character_name": "قهرمان"}],
+                "gallery": ["https://img.example.com/a.jpg",
+                            {"image_url": "https://img.example.com/b.jpg", "caption": "x"}],
+                "downloads": [{"quality": "720p", "url": "https://dl.example.com/n.mkv"}],
+            }],
+        }
+        res = self.client.post("/admin/movies/import/", payload, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual((res.data["created"], res.data["updated"], res.data["skipped"]), (1, 0, 0))
+        movie = Movie.objects.get(imdb_id="tt8000010")
+        self.assertEqual(movie.title, "فیلم وارداتی")
+        self.assertEqual(movie.genres.first().tmdb_id, 18)
+        self.assertEqual(movie.movie_cast.first().person.tmdb_id, "777")
+        self.assertEqual(movie.gallery.count(), 2)
+        self.assertEqual(movie.downloads.count(), 1)
+
+    def test_import_updates_existing_movie_without_duplicate(self):
+        self.auth()
+        payload = {"items": [{
+            "title": "عنوان تازه", "imdb_id": "tt8000001", "runtime": 101,
+        }]}
+        res = self.client.post("/admin/movies/import/", payload, format="json")
+        self.assertEqual((res.data["created"], res.data["updated"]), (0, 1))
+        self.assertEqual(Movie.objects.filter(imdb_id="tt8000001").count(), 1)
+        self.movie.refresh_from_db()
+        self.assertEqual(self.movie.title, "عنوان تازه")
+        # downloads در فایل نبوده → دست نخورده باقی می‌ماند
+        self.assertEqual(self.movie.downloads.count(), 1)
+
+    def test_import_reports_item_errors_and_continues(self):
+        self.auth()
+        payload = {"items": [
+            {"title": "بدون آیدی", "runtime": 90},  # imdb_id ندارد → خطا
+            {"title": "سالم", "imdb_id": "tt8000011", "runtime": 90},
+        ]}
+        res = self.client.post("/admin/movies/import/", payload, format="json")
+        self.assertEqual((res.data["created"], res.data["skipped"]), (1, 1))
+        self.assertIn("imdb_id", res.data["errors"][0]["error"])
+
+    def test_import_rejects_malformed_payload(self):
+        self.auth()
+        res = self.client.post("/admin/movies/import/", {"foo": "bar"}, format="json")
+        self.assertEqual(res.status_code, 400)
+
+    # --- ورودی: سریال ---
+    def test_import_series_with_seasons_episodes_and_downloads(self):
+        self.auth()
+        payload = {"items": [{
+            "title": "سریال وارداتی", "imdb_id": "tt8000020",
+            "seasons": [{
+                "season_number": 1,
+                "episodes": [
+                    {"episode_number": 1, "title": "شروع",
+                     "downloads": [{"quality": "1080p", "url": "https://dl.example.com/s1e1.mkv"}]},
+                    {"episode_number": 2, "title": "ادامه"},
+                ],
+            }],
+        }]}
+        res = self.client.post("/admin/series/import/", payload, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["created"], 1)
+        from series.models import Series
+
+        series = Series.objects.get(imdb_id="tt8000020")
+        season = series.seasons.get(season_number=1)
+        self.assertEqual(season.episodes.count(), 2)
+        ep1 = season.episodes.get(episode_number=1)
+        self.assertEqual(ep1.downloads.count(), 1)
+        # ایمپورت دوباره = به‌روزرسانی، نه تکراری
+        res = self.client.post("/admin/series/import/", payload, format="json")
+        self.assertEqual(res.data["updated"], 1)
+        self.assertEqual(Series.objects.filter(imdb_id="tt8000020").count(), 1)
+        self.assertEqual(season.episodes.count(), 2)
+
+    def test_export_import_round_trip_series(self):
+        self.auth()
+        exported = self.client.get("/admin/series/export/").data
+        from series.models import Series
+
+        Series.objects.all().delete()
+        res = self.client.post("/admin/series/import/", exported, format="json")
+        self.assertEqual(res.data["created"], 1)
+        series = Series.objects.get(imdb_id="tt8000002")
+        ep = series.seasons.first().episodes.first()
+        self.assertEqual(ep.downloads.count(), 1)
+
+    # --- مجوزها ---
+    def test_import_requires_add_permission_and_export_view(self):
+        viewer = make_user("jsonviewer", is_staff=True)
+        role = Group.objects.create(name="مشاهده JSON")
+        role.permissions.set(Permission.objects.filter(
+            codename__in=["view_movie", "view_series"]
+        ))
+        viewer.groups.add(role)
+        self.auth(viewer)
+        self.assertEqual(self.client.get("/admin/movies/export/").status_code, 200)
+        res = self.client.post(
+            "/admin/movies/import/",
+            {"items": [{"title": "x", "imdb_id": "tt8000030", "runtime": 90}]},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(Movie.objects.filter(imdb_id="tt8000030").exists())

@@ -1,5 +1,6 @@
 from datetime import datetime
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from series.models import (
@@ -81,7 +82,7 @@ class Command(BaseCommand):
 
                         if ep.get("still_path"):
                             still_image_url = (
-                                "https://image.tmdb.org/t/p/w780"
+                                settings.TMDB_IMAGE_BASE_URL.rstrip("/") + "/w780"
                                 + ep["still_path"]
                             )
 
@@ -108,7 +109,7 @@ class Command(BaseCommand):
                                 "vote_average": ep.get("vote_average"),
                                 "vote_count": ep.get("vote_count"),
                                 "still_image_url": (
-                                    "https://image.tmdb.org/t/p/w780"
+                                    settings.TMDB_IMAGE_BASE_URL.rstrip("/") + "/w780"
                                     + ep["still_path"]
                                     if ep.get("still_path")
                                     else None

@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
@@ -13,7 +14,7 @@ from movies.models import Movie
 from movies.services.tmdb import TMDBClient
 
 
-IMAGE_BASE = "https://image.tmdb.org/t/p"
+IMAGE_BASE = settings.TMDB_IMAGE_BASE_URL.rstrip("/")
 
 
 class Command(BaseCommand):

@@ -1,7 +1,10 @@
 import time
 from datetime import datetime
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
+
+IMG_BASE = settings.TMDB_IMAGE_BASE_URL.rstrip("/")
 from django.db import transaction
 
 from movies.services.tmdb import TMDBClient
@@ -77,11 +80,11 @@ class Command(BaseCommand):
                         original_title=en_data.get("title"),
                         release_date=release_date,
                         poster_url=(
-                            f"https://image.tmdb.org/t/p/w500{en_data.get('poster_path')}"
+                            f"{IMG_BASE}/w500{en_data.get('poster_path')}"
                             if en_data.get("poster_path") else None
                         ),
                         backdrop_url=(
-                            f"https://image.tmdb.org/t/p/original{en_data.get('backdrop_path')}"
+                            f"{IMG_BASE}/original{en_data.get('backdrop_path')}"
                             if en_data.get("backdrop_path") else None
                         ),
                     )
@@ -133,7 +136,7 @@ class Command(BaseCommand):
                                 death_date=person_data.get("deathday"),
                                 place_of_birth=person_data.get("place_of_birth") or "",
                                 profile_image_url=(
-                                    f"https://image.tmdb.org/t/p/w500{person_data.get('profile_path')}"
+                                    f"{IMG_BASE}/w500{person_data.get('profile_path')}"
                                     if person_data.get("profile_path") else None
                                 ),
                             )

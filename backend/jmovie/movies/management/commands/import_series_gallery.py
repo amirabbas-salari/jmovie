@@ -1,11 +1,12 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from series.models import Series, SeriesGalleryImage
 from movies.services.tmdb import TMDBClient
 
-IMAGE_BASE = "https://image.tmdb.org/t/p/original"
+IMAGE_BASE = settings.TMDB_IMAGE_BASE_URL.rstrip("/") + "/original"
 
 MAX_WORKERS = 8
 

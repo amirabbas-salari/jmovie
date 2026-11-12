@@ -1,13 +1,14 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from movies.models import Movie
 from movies.services.tmdb import TMDBClient
 
 
-POSTER_BASE = "https://image-tmdb-org-7znyli2mits1.curlhub.io/t/p/w500"
-BACKDROP_BASE = "https://image-tmdb-org-7znyli2mits1.curlhub.io/t/p/original"
+POSTER_BASE = settings.TMDB_IMAGE_BASE_URL.rstrip("/") + "/w500"
+BACKDROP_BASE = settings.TMDB_IMAGE_BASE_URL.rstrip("/") + "/original"
 
 MAX_WORKERS = 8
 

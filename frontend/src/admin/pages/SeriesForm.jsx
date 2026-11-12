@@ -94,6 +94,16 @@ export default function SeriesForm() {
       genre_ids: [...new Set([...f.genre_ids, ...genreIds])],
     }))
     if (castItems.length) setCast(castItems)
+    // تا ۵ تصویر گالری از TMDB (تکراری‌ها و سقف کلی گالری رعایت می‌شود)
+    if (data.gallery_images?.length) {
+      setGallery((prev) => {
+        const seen = new Set(prev.map((g) => g.image_url))
+        const fresh = data.gallery_images
+          .filter((u) => u && !seen.has(u))
+          .map((u, i) => ({ image_url: u, caption: "", order: prev.length + i }))
+        return [...prev, ...fresh].slice(0, 10)
+      })
+    }
   }
 
   const handleSubmit = async (e) => {

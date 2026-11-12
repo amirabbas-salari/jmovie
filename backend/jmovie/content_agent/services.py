@@ -27,8 +27,6 @@ from .translator import contains_persian, translate_to_persian
 
 logger = logging.getLogger(__name__)
 
-TMDB_IMG = "https://image.tmdb.org/t/p/"
-
 # نگاشت منبع تنظیمات -> اندپوینت‌های TMDB برای فیلم و سریال
 SOURCE_ENDPOINTS = {
     "trending": [("movie", "trending/movie/week"), ("tv", "trending/tv/week")],
@@ -42,7 +40,12 @@ MAX_CAST = 10
 
 
 def _img(path, size="w500"):
-    return f"{TMDB_IMG}{size}{path}" if path else ""
+    # بیس‌لینک تصاویر از settings (متغیر محیطی TMDB_IMAGE_BASE_URL) خوانده
+    # می‌شود تا پوستر/بک‌گراند/پروفایل ایجنت هم روی همان CDN/پروکسی ساخته شود.
+    from django.conf import settings
+
+    base = getattr(settings, "TMDB_IMAGE_BASE_URL", "https://image.tmdb.org/t/p/")
+    return f"{base}{size}{path}" if path else ""
 
 
 def _parse_date(value):

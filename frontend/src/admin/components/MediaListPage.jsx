@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { CheckSquare, Eraser, Loader2, Pencil, Star, Trash2 } from "lucide-react"
+import { CheckSquare, Copy, Download, Eraser, Loader2, Pencil, Star, Trash2, Upload } from "lucide-react"
 import { useAdmin } from "../context/AdminContext"
 import { getApiError } from "../services/adminApi"
 import {
@@ -129,6 +129,85 @@ export default function MediaListPage({ title, subtitle, basePath, api, perms, k
     }
   }
 
+  // --- اکسپورت/ایمپورت JSON ---
+  const [exportData, setExportData] = useState(null) // {text, count, scope}
+  const [exportLoading, setExportLoading] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [importText, setImportText] = useState("")
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const [importError, setImportError] = useState("")
+  const [copied, setCopied] = useState(false)
+
+  const startExport = async () => {
+    if (exportLoading) return
+    setActionError("")
+    setExportLoading(true)
+    try {
+      const ids = selected.size ? [...selected] : undefined
+      const res = await api.exportJson(ids)
+      setExportData({
+        text: JSON.stringify(res, null, 2),
+        count: res.count,
+        scope: ids ? `${formatNumber(ids.length)} ${kindLabel} انتخاب‌شده` : `همه‌ی ${kindLabel}ها`,
+      })
+    } catch (err) {
+      setActionError(getApiError(err))
+    } finally {
+      setExportLoading(false)
+    }
+  }
+
+  const downloadExportFile = () => {
+    if (!exportData) return
+    const blob = new Blob([exportData.text], { type: "application/json;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${kindLabel === "سریال" ? "series" : "movies"}-export.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const copyExport = async () => {
+    try {
+      await navigator.clipboard.writeText(exportData.text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* کلیپ‌بورد در دسترس نیست؛ متن قابل انتخاب دستی است */ }
+  }
+
+  const onImportFile = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => { setImportText(String(reader.result || "")); setImportError("") }
+    reader.readAsText(file)
+    e.target.value = ""
+  }
+
+  const runImport = async () => {
+    setImportError("")
+    setImportResult(null)
+    let payload
+    try {
+      payload = JSON.parse(importText)
+    } catch {
+      setImportError("متن واردشده JSON معتبر نیست.")
+      return
+    }
+    setImporting(true)
+    try {
+      const res = await api.importJson(payload)
+      setImportResult(res)
+      if (res.created || res.updated) await refresh()
+    } catch (err) {
+      setImportError(getApiError(err))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   return (
     <div>
       <PageHeader title={title} subtitle={subtitle} actionTo={`${basePath}/new`} actionLabel={`افزودن ${kindLabel}`} actionPerm={perms.add} can={can} />
@@ -151,6 +230,32 @@ export default function MediaListPage({ title, subtitle, basePath, api, perms, k
             {purgeLoading
               ? "در حال بررسی لینک‌های دانلود..."
               : `حذف ${kindLabel}های بدون لینک دانلود`}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={startExport}
+          disabled={exportLoading}
+          aria-busy={exportLoading}
+          className="flex items-center gap-2 rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-2.5 text-xs font-bold text-sky-300 transition hover:bg-sky-500/20 disabled:cursor-wait disabled:opacity-60"
+        >
+          {exportLoading
+            ? <Loader2 className="h-4 w-4 animate-spin" />
+            : <Download className="h-4 w-4" />}
+          {exportLoading
+            ? "در حال ساخت خروجی..."
+            : selected.size
+              ? `خروجی JSON انتخاب‌شده‌ها (${formatNumber(selected.size)})`
+              : "خروجی JSON همه"}
+        </button>
+        {can(perms.add) && (
+          <button
+            type="button"
+            onClick={() => { setShowImport(true); setImportResult(null); setImportError("") }}
+            className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 text-xs font-bold text-emerald-300 transition hover:bg-emerald-500/20"
+          >
+            <Upload className="h-4 w-4" />
+            ورود با کد JSON
           </button>
         )}
       </div>
@@ -324,6 +429,106 @@ export default function MediaListPage({ title, subtitle, basePath, api, perms, k
                   {busy ? "در حال حذف..." : `حذف ${formatNumber(purgeCount)} مورد`}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {exportData && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setExportData(null)} />
+          <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
+            <h3 className="mb-2 font-bold text-zinc-100">خروجی JSON {kindLabel}ها</h3>
+            <p className="mb-3 text-sm text-zinc-400">
+              {formatNumber(exportData.count)} {kindLabel} ({exportData.scope}) — این کد را کپی کنید یا فایل را دانلود کنید؛
+              با دکمه‌ی «ورود با کد JSON» در همین صفحه (یا محیط دیگر) قابل برگرداندن است.
+            </p>
+            <textarea
+              readOnly
+              dir="ltr"
+              value={exportData.text}
+              onFocus={(e) => e.target.select()}
+              className="mb-4 min-h-56 flex-1 resize-none overflow-auto rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-300 outline-none"
+            />
+            <div className="flex flex-wrap gap-3">
+              <button type="button" onClick={copyExport} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/10">
+                <Copy className="h-4 w-4" /> {copied ? "کپی شد!" : "کپی کد"}
+              </button>
+              <button type="button" onClick={downloadExportFile} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-sky-500/85 py-2.5 text-sm font-bold text-white transition hover:bg-sky-500">
+                <Download className="h-4 w-4" /> دانلود فایل JSON
+              </button>
+              <button type="button" onClick={() => setExportData(null)} className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/10">
+                بستن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImport && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={importing ? undefined : () => setShowImport(false)} />
+          <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
+            <h3 className="mb-2 font-bold text-zinc-100">ورود {kindLabel} با کد JSON</h3>
+            <p className="mb-3 text-sm leading-6 text-zinc-400">
+              کد JSON را اینجا بچسبانید یا فایل JSON انتخاب کنید. هر آیتم با
+              <span dir="ltr" className="mx-1 font-mono text-[12px] text-zinc-300">imdb_id</span>
+              شناخته می‌شود؛ اگر از قبل موجود باشد به‌روزرسانی می‌شود و تکراری ساخته نمی‌شود.
+              {kindLabel === "سریال" && " فصل‌ها، قسمت‌ها و لینک‌های هر قسمت هم وارد می‌شوند."}
+            </p>
+            <textarea
+              dir="ltr"
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder='{"type": "...", "items": [ { "imdb_id": "tt...", "title": "..." } ]}'
+              className="mb-3 min-h-44 flex-1 resize-none overflow-auto rounded-xl border border-white/10 bg-black/40 p-3 font-mono text-[11px] leading-5 text-zinc-200 outline-none focus:border-emerald-500/40"
+            />
+            <div className="mb-3 flex items-center gap-3">
+              <label className="cursor-pointer rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium text-zinc-300 transition hover:bg-white/10">
+                انتخاب فایل JSON
+                <input type="file" accept=".json,application/json" className="hidden" onChange={onImportFile} />
+              </label>
+              {importText && <span className="text-[11px] text-zinc-500">{formatNumber(importText.length)} نویسه</span>}
+            </div>
+            {importError && (
+              <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{importError}</div>
+            )}
+            {importResult && (
+              <div className="mb-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                <p>
+                  {formatNumber(importResult.created)} {kindLabel} ساخته شد،{" "}
+                  {formatNumber(importResult.updated)} تا به‌روزرسانی شد
+                  {importResult.skipped > 0 && <>، {formatNumber(importResult.skipped)} آیتم رد شد</>}.
+                </p>
+                {importResult.errors?.length > 0 && (
+                  <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-[12px] text-red-300">
+                    {importResult.errors.map((e, i) => (
+                      <li key={i} dir="ltr" style={{ textAlign: "right" }}>
+                        #{e.index}{e.imdb_id ? ` (${e.imdb_id})` : ""}: {e.error}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowImport(false)}
+                disabled={importing}
+                className="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-medium text-zinc-200 transition hover:bg-white/10 disabled:opacity-50"
+              >
+                بستن
+              </button>
+              <button
+                type="button"
+                onClick={runImport}
+                disabled={importing || !importText.trim()}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-500/85 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-500 disabled:opacity-50"
+              >
+                {importing && <Loader2 className="h-4 w-4 animate-spin" />}
+                {importing ? "در حال وارد کردن..." : "وارد کردن"}
+              </button>
             </div>
           </div>
         </div>
