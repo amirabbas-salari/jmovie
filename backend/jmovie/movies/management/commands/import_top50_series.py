@@ -1,7 +1,10 @@
 from datetime import datetime
 import time
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
+
+IMG_BASE = settings.TMDB_IMAGE_BASE_URL.rstrip("/")
 from django.db import transaction
 
 from genres.models import Genre
@@ -11,7 +14,7 @@ from series.models import Series, SeriesCast
 from movies.services.tmdb import TMDBClient
 
 
-IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+IMAGE_BASE_URL = IMG_BASE + "/w500"
 
 
 class Command(BaseCommand):
@@ -92,11 +95,11 @@ class Command(BaseCommand):
 
                     poster_url = None
                     if data.get("poster_path"):
-                        poster_url = f"https://image.tmdb.org/t/p/w500{en_data['poster_path']}"
+                        poster_url = f"{IMG_BASE}/w500{en_data['poster_path']}"
 
                     backdrop_url = None
                     if data.get("backdrop_path"):
-                        backdrop_url = f"https://image.tmdb.org/t/p/original{en_data['backdrop_path']}"
+                        backdrop_url = f"{IMG_BASE}/original{en_data['backdrop_path']}"
                     
                     
                     series = Series.objects.create(

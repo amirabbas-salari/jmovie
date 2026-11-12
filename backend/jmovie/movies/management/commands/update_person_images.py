@@ -1,8 +1,9 @@
+from django.conf import settings
 from django.core.management.base import BaseCommand
 from backend.jmovie.people.models import Person
 from backend.jmovie.movies.services.tmdb import TMDBClient
 
-IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w500"
+IMAGE_BASE_URL = settings.TMDB_IMAGE_BASE_URL.rstrip("/") + "/w500"
 
 
 class Command(BaseCommand):

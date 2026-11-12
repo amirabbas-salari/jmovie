@@ -70,6 +70,13 @@ const mediaCrud = (path) => ({
   withoutDownloadsCount: async () => (await api.get(`${path}without-downloads-count/`, { timeout: 120000 })).data,
   withoutDownloads: async () => (await api.get(`${path}without-downloads/`, { timeout: 120000 })).data,
   purgeWithoutDownloads: async () => (await api.post(`${path}purge-without-downloads/`, {}, { timeout: 300000 })).data,
+  // اکسپورت/ایمپورت JSON: خروجی {type, version, count, items} می‌دهد و
+  // ایمپورت همان فرمت (یا لیست ساده‌ی آیتم‌ها) را می‌پذیرد.
+  exportJson: async (ids) => (await api.get(`${path}export/`, {
+    params: ids?.length ? { ids: ids.join(",") } : {},
+    timeout: 300000,
+  })).data,
+  importJson: async (payload) => (await api.post(`${path}import/`, payload, { timeout: 300000 })).data,
 })
 
 export const moviesApi = mediaCrud("/admin/movies/")

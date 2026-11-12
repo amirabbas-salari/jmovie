@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 
 from movies.models import Movie, MovieGalleryImage
 
-IMAGE_BASE = "https://image-tmdb-org-7znyli2mits1.curlhub.io/t/p/original"
+IMAGE_BASE = settings.TMDB_IMAGE_BASE_URL.rstrip("/") + "/original"
 BASE_URL = "https://api-themoviedb-org-7znyli2mits1.curlhub.io/3"
 
 CONCURRENT_REQUESTS = 20

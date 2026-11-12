@@ -21,6 +21,7 @@ from series.models import Episode, Season, Series, SeriesCast
 
 from movies.services.tmdb import TMDBClient
 
+from . import importexport as _importexport
 from .models import AdminAuditLog
 from .permissions import HasModelPermission, IsStaffMember, IsSuperAdmin
 from .serializers import (
@@ -194,11 +195,29 @@ class AdminDashboardView(APIView):
 
 
 
-TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/"
-
-
 def _tmdb_img(path, size):
-    return f"{TMDB_IMAGE_BASE}{size}{path}" if path else ""
+    # بیس‌لینک از settings خوانده می‌شود (متغیر محیطی TMDB_IMAGE_BASE_URL)
+    # تا با یک تغییر در env، همه‌ی آدرس‌های تصویری (پوستر/بک‌گراند/گالری)
+    # روی CDN یا پروکسی دلخواه ساخته شوند.
+    base = getattr(settings, "TMDB_IMAGE_BASE_URL", "https://image.tmdb.org/t/p/")
+    return f"{base}{size}{path}" if path else ""
+
+
+# حداکثر تصاویر گالری که از TMDB برای هر فیلم/سریال گرفته می‌شود
+TMDB_GALLERY_LIMIT = 5
+
+
+def _tmdb_gallery_images(data):
+    """تا ۵ تصویر برای گالری: اول بک‌دراپ‌ها (بر اساس امتیاز)، و اگر
+    بک‌دراپی نبود پوسترها. خروجی: فهرست URL کامل با بیس‌لینک settings."""
+    images = data.get("images") or {}
+    pool = images.get("backdrops") or images.get("posters") or []
+    pool = sorted(pool, key=lambda im: (im.get("vote_average") or 0), reverse=True)
+    return [
+        _tmdb_img(im.get("file_path"), "w1280")
+        for im in pool[:TMDB_GALLERY_LIMIT]
+        if im.get("file_path")
+    ]
 
 
 class TmdbLookupView(APIView):
@@ -311,6 +330,8 @@ class TmdbLookupView(APIView):
             "imdb_votes": data.get("vote_count") or 0,
             "poster_url": _tmdb_img(data.get("poster_path"), "w500"),
             "backdrop_url": _tmdb_img(data.get("backdrop_path"), "w1280"),
+            # تا ۵ تصویر آماده برای تب گالری فرم (با همان بیس‌لینک تصاویر)
+            "gallery_images": _tmdb_gallery_images(data),
             "country": countries[0].get("name", "") if countries else "",
             "number_of_seasons": data.get("number_of_seasons"),
             "number_of_episodes": data.get("number_of_episodes"),
@@ -482,12 +503,102 @@ class MediaBulkActionsMixin:
         return Response({"deleted": len(rows)})
 
 
-class AdminMovieViewSet(MediaBulkActionsMixin, AdminModelViewSet):
+class MediaImportExportMixin:
+    """اکسپورت/ایمپورت JSON فیلم/سریال از پنل (کد در importexport.py).
+
+    GET  .../export/?ids=1,2   → {type, version, count, items}
+    POST .../import/           → بدنه: {items:[...]} یا [...] یا یک آیتم
+                                 پاسخ: {created, updated, skipped, errors}
+    هر آیتم با imdb_id شناخته می‌شود؛ تکراری‌ها به‌روزرسانی می‌شوند.
+    """
+
+    media_is_series = False
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export_json(self, request):
+        qs = self.queryset.all()
+        ids_param = request.query_params.get("ids")
+        if ids_param:
+            ids = [int(x) for x in ids_param.split(",") if x.strip().isdigit()]
+            qs = qs.filter(id__in=ids)
+        ie = _importexport
+        if self.media_is_series:
+            qs = qs.prefetch_related(
+                "genres", "gallery", "cast__person", "seasons__episodes"
+            )
+            items = [ie.export_series(s) for s in qs]
+            media_type = "series"
+        else:
+            qs = qs.prefetch_related("genres", "gallery", "movie_cast__person")
+            items = [ie.export_movie(m) for m in qs]
+            media_type = "movie"
+        return Response({
+            "type": media_type,
+            "version": ie.EXPORT_VERSION,
+            "count": len(items),
+            "items": items,
+        })
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_json(self, request):
+        ie = _importexport
+        items = ie.extract_items(request.data)
+        if items is None:
+            return Response(
+                {"detail": "فرمت JSON معتبر نیست؛ یک لیست از آیتم‌ها یا آبجکتی با کلید items بفرستید."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        importer = ie.import_series_item if self.media_is_series else ie.import_movie_item
+        model_label = self.queryset.model._meta.label_lower
+        created = updated = 0
+        errors = []
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                errors.append({"index": index, "error": "آیتم باید یک آبجکت JSON باشد."})
+                continue
+            try:
+                obj, was_created = importer(item)
+            except Exception as exc:  # خطای یک آیتم نباید بقیه را متوقف کند
+                errors.append({
+                    "index": index,
+                    "imdb_id": item.get("imdb_id"),
+                    "error": str(exc)[:300],
+                })
+                continue
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+            try:
+                AdminAuditLog.objects.create(
+                    user=request.user if request.user.is_authenticated else None,
+                    username=getattr(request.user, "username", ""),
+                    action=(AdminAuditLog.ACTION_CREATE if was_created
+                            else AdminAuditLog.ACTION_UPDATE),
+                    model_label=model_label,
+                    object_id=str(obj.pk),
+                    object_repr=str(obj)[:255],
+                    changes={"source": "json-import"},
+                    ip_address=_client_ip(request),
+                )
+            except Exception:
+                pass
+        return Response({
+            "created": created,
+            "updated": updated,
+            "skipped": len(errors),
+            "errors": errors,
+        })
+
+
+class AdminMovieViewSet(MediaImportExportMixin, MediaBulkActionsMixin, AdminModelViewSet):
     extra_action_permissions = {
         "bulk_delete": "movies.delete_movie",
         "purge_without_downloads": "movies.delete_movie",
         "without_downloads_count": "movies.view_movie",
         "without_downloads": "movies.view_movie",
+        "export_json": "movies.view_movie",
+        "import_json": "movies.add_movie",
     }
     queryset = Movie.objects.all().order_by("-updated_at")
     serializer_class = AdminMovieSerializer
@@ -515,13 +626,15 @@ class AdminMovieViewSet(MediaBulkActionsMixin, AdminModelViewSet):
         return qs
 
 
-class AdminSeriesViewSet(MediaBulkActionsMixin, AdminModelViewSet):
+class AdminSeriesViewSet(MediaImportExportMixin, MediaBulkActionsMixin, AdminModelViewSet):
     media_is_series = True
     extra_action_permissions = {
         "bulk_delete": "series.delete_series",
         "purge_without_downloads": "series.delete_series",
         "without_downloads_count": "series.view_series",
         "without_downloads": "series.view_series",
+        "export_json": "series.view_series",
+        "import_json": "series.add_series",
     }
     queryset = Series.objects.all().order_by("-updated_at")
     serializer_class = AdminSeriesSerializer

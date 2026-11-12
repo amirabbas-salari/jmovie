@@ -214,14 +214,23 @@ class TMDBClient:
         return response.json()
 
     # --- جزئیات کامل برای «دریافت خودکار» پنل مدیریت (همراه عوامل و آی‌دی‌های خارجی) ---
+    # images هم گرفته می‌شود تا پنل بتواند تا ۵ تصویر برای گالری اثر پر کند.
     def movie_full_details(self, tmdb_id, language="fa-IR"):
         return self._get(
             f"movie/{tmdb_id}",
-            {"language": language, "append_to_response": "credits,external_ids"},
+            {
+                "language": language,
+                "append_to_response": "credits,external_ids,images",
+                "include_image_language": "en,null",
+            },
         )
 
     def tv_full_details(self, tmdb_id, language="fa-IR"):
         return self._get(
             f"tv/{tmdb_id}",
-            {"language": language, "append_to_response": "credits,external_ids"},
+            {
+                "language": language,
+                "append_to_response": "credits,external_ids,images",
+                "include_image_language": "en,null",
+            },
         )

@@ -106,6 +106,7 @@ export default function TmdbLookup({ mediaType, onApply }) {
             <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-400">{result.description}</p>
             <p className="mt-1 text-[11px] text-zinc-500">
               ⭐ {result.imdb_rating ?? "—"} • {(result.genres || []).map((g) => g.name).join("، ")} • {(result.cast || []).length} نفر از عوامل
+              {(result.gallery_images?.length ?? 0) > 0 && ` • ${result.gallery_images.length} تصویر گالری`}
               {(result.genres || []).some((g) => !g.local_id) && " • چند ژانر جدید ساخته می‌شود"}
             </p>
           </div>
@@ -117,7 +118,7 @@ export default function TmdbLookup({ mediaType, onApply }) {
           </div>
         </div>
       )}
-      <p className="mt-2 text-[11px] text-zinc-600">فیلدهای خالی فرم با اطلاعات TMDB پر می‌شوند؛ ژانرها و افرادی که در سایت نیستند خودکار ساخته می‌شوند.</p>
+      <p className="mt-2 text-[11px] text-zinc-600">فیلدهای خالی فرم با اطلاعات TMDB پر می‌شوند؛ ژانرها و افرادی که در سایت نیستند خودکار ساخته می‌شوند و تا ۵ تصویر هم به گالری اضافه می‌شود.</p>
     </section>
   )
 }
