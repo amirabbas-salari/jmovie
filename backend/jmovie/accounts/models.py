@@ -140,7 +140,7 @@ class UserListItem(TimeStampedModel):
 class BaseUserStatus(TimeStampedModel):
     STATUS_WATCHED = "watched"
     STATUS_FAVORITE = "favorite"
-    STATUS_WATCH_LATER = "watch_later"  
+    STATUS_WATCH_LATER = "watch_later"
 
     STATUS_CHOICES = (
         (STATUS_WATCHED, "Watched"),
