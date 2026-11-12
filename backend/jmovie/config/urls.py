@@ -68,6 +68,9 @@ urlpatterns = [
 
     # ایجنت محتوای خودکار (پنل ادمین)
     path("agent/", include("content_agent.urls")),
+
+    # فرم‌های صفحه‌ی حمایت/پشتیبانی (ثبت پیام عمومی)
+    path("support/", include("core.urls")),
     
     # search
     path("search/", GlobalSearchView.as_view(), name="global-search"),
