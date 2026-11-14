@@ -34,7 +34,8 @@
 
 ## آواتار و لیپ‌سینک
 
-- رندر با three.js (`frontend/src/components/assistant/AssistantAvatar.jsx`).
+- چهره‌ی پیش‌فرض: آواتار three.js؛ اگر روی ایجنت `TAVUS_API_KEY` و `TAVUS_REPLICA_ID` ست شده باشد، چهره‌ی ویدیویی زنده‌ی Tavus (شرکت‌کننده‌ی `movieverse-avatar` در همان اتاق LiveKit) با لیپ‌سینک داخلی خودش داخل ویجت نشان داده می‌شود و در نبود/خرابی آن، آواتار سه‌بعدی fallback است. پلن رایگان Tavus حدود ۲۰–۲۵ دقیقه در ماه می‌دهد؛ جزئیات در `voice_agent/README.md`.
+- رندر سه‌بعدی با three.js است (`frontend/src/components/assistant/AssistantAvatar.jsx`).
 - لیپ‌سینک **دامنه‌ای** است: دامنه‌ی صدای خروجی (Web Audio `AnalyserNode` روی ترک صوتی ایجنت؛ در حالت مرورگر تقریب هجایی از خود گفتار مرورگر) دهان را باز/بسته می‌کند.
 - اگر فایل `frontend/public/models/avatar.glb` موجود باشد و Morph Target دهان/فک (مثل `mouthOpen`، `jawOpen`، `viseme_aa`) داشته باشد، همان مدل لود و مورف‌ها رانده می‌شوند؛ وگرنه آواتار رویه‌ای داخلی رندر می‌شود. اسناد منبع/لایسنس مدل را در `ASSET_LICENSES.md` ثبت کنید.
 - لیپ‌سینک viseme دقیق (مثل NVIDIA Audio2Face) در این پروتوتایپ نیست؛ مسیر ارتقا در همان فایل مستند شده است.

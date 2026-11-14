@@ -13,8 +13,9 @@
 خودمیزبان Speaches و Piper فارسی). جزئیات: voice_agent/README.md.
 
 حالت‌های آواتار (listening/thinking/speaking/idle) و کارت‌های پیشنهاد
-از روی دیتاچنل LiveKit برای فرانت ارسال می‌شوند تا آواتار سه‌بعدی و
-کارت‌های داخل سایت هم‌زمان به‌روز شوند.
+از روی دیتاچنل LiveKit برای فرانت ارسال می‌شوند تا آواتار و کارت‌های
+داخل سایت هم‌زمان به‌روز شوند. چهره می‌تواند ویدیوی زنده‌ی Tavus باشد
+(با TAVUS_API_KEY و TAVUS_REPLICA_ID) وگرنه آواتار سه‌بعدی فرانت است.
 
 هیچ credentialای در کد نیست؛ همه از env خوانده می‌شود. اگر کلیدهای
 لازم نباشند ایجنت با پیام روشن متوقف می‌شود (حالت جعلی ساخته نمی‌شود).
@@ -28,7 +29,7 @@ import os
 import httpx
 from livekit import agents
 from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, function_tool, inference
-from livekit.plugins import openai, silero
+from livekit.plugins import openai, silero, tavus
 
 logger = logging.getLogger("jmovie-voice-agent")
 
@@ -97,6 +98,21 @@ TTS_RESPONSE_FORMAT = os.getenv("TTS_RESPONSE_FORMAT", _SPEECH.get("tts_response
 # زبان مکالمه (شخصیت دستیار + زبان تشخیص گفتار)
 ASSISTANT_LANGUAGE = os.getenv("ASSISTANT_LANGUAGE", _SPEECH["language"]).strip().lower()
 STT_LANGUAGE = os.getenv("STT_LANGUAGE", ASSISTANT_LANGUAGE)
+
+# ---------------------------------------------------------------------------
+# چهره‌ی ویدیویی Tavus (اختیاری) — آواتار فوتورئالیستیک زنده روی همان اتاق
+# LiveKit. فقط وقتی هر دو مقدار ست شده باشند فعال می‌شود؛ در غیر این صورت
+# فرانت از آواتار سه‌بعدی داخلی استفاده می‌کند. صدای مکالمه همچنان از
+# TTS خودمان می‌آید و Tavus فقط صورتِ هم‌گام با صدا را منتشر می‌کند.
+# ---------------------------------------------------------------------------
+TAVUS_API_KEY = os.getenv("TAVUS_API_KEY", "")
+TAVUS_REPLICA_ID = os.getenv("TAVUS_REPLICA_ID", "")
+TAVUS_PERSONA_ID = os.getenv("TAVUS_PERSONA_ID", "")
+
+
+def tavus_enabled():
+    return bool(TAVUS_API_KEY and TAVUS_REPLICA_ID)
+
 
 # LLM از هر endpoint سازگار با OpenAI؛ پیش‌فرض OpenRouter (همان کلید چت
 # متنی سایت). برای اجرای کاملاً لوکال: LLM_BASE_URL=http://localhost:11434/v1
@@ -279,6 +295,10 @@ class MovieVerseAssistant(Agent):
     async def publish_state(self, state: str):
         await self._publish({"type": "assistant_state", "state": state})
 
+    async def publish_avatar_mode(self, mode: str):
+        """به فرانت می‌گوید چهره ویدیویی (tavus) فعال است یا آواتار سه‌بعدی (3d)."""
+        await self._publish({"type": "assistant_avatar", "mode": mode})
+
     async def _run_tool(self, tool: str, arguments: dict) -> str:
         await self.publish_state("thinking")
         result = await self._catalog.call(tool, arguments)
@@ -388,6 +408,30 @@ async def entrypoint(ctx: JobContext):
             asyncio.create_task(assistant.publish_state("listening"))
 
     await ctx.connect()
+
+    # چهره‌ی ویدیویی Tavus (اگر کانفیگ شده باشد) — خرابی‌اش نباید مکالمه‌ی
+    # صوتی را از کار بیندازد؛ فرانت در نبود ویدیو آواتار سه‌بعدی نشان می‌دهد.
+    if tavus_enabled():
+        try:
+            avatar_kwargs = {
+                # نام این مقدار در داشبورد Tavus ‏replica است؛ پلاگین آن را face_id می‌نامد
+                "face_id": TAVUS_REPLICA_ID,
+                "api_key": TAVUS_API_KEY,
+                "avatar_participant_identity": "movieverse-avatar",
+                "avatar_participant_name": "دستیار سینمایی مووی‌ورس",
+            }
+            if TAVUS_PERSONA_ID:
+                avatar_kwargs["persona_id"] = TAVUS_PERSONA_ID
+            avatar = tavus.AvatarSession(**avatar_kwargs)
+            await avatar.start(session, room=ctx.room)
+            await assistant.publish_avatar_mode("tavus")
+            logger.info("Tavus avatar started (replica=%s)", TAVUS_REPLICA_ID)
+        except Exception:  # noqa: BLE001
+            logger.warning("شروع آواتار Tavus ناموفق بود؛ ادامه بدون ویدیو", exc_info=True)
+            await assistant.publish_avatar_mode("3d")
+    else:
+        await assistant.publish_avatar_mode("3d")
+
     await session.start(
         assistant,
         room=ctx.room,

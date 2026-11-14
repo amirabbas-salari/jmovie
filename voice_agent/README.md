@@ -25,6 +25,12 @@ pip install -r requirements.txt
 python agent.py dev     # توسعه | python agent.py start برای production
 ```
 
+## چهره‌ی ویدیویی زنده: Tavus (اختیاری)
+
+اگر `TAVUS_API_KEY` و `TAVUS_REPLICA_ID` ست شده باشند، یک شرکت‌کننده‌ی ویدیویی Tavus با هویت `movieverse-avatar` به اتاق اضافه می‌شود و چهره‌ی فوتورئالیستیکِ هم‌گام با صدای TTS ما را منتشر می‌کند؛ فرانت همان ویدیو را داخل ویجت نشان می‌دهد. خرابی یا نبود Tavus مکالمه‌ی صوتی را قطع نمی‌کند (فقط هشدار لاگ می‌شود) و فرانت به آواتار سه‌بعدی داخلی برمی‌گردد.
+
+از https://app.tavus.io یک API Key بگیرید و یک replica آماده (stock) انتخاب کنید. پلن رایگان Tavus حدود ۲۰–۲۵ دقیقه مکالمه در ماه می‌دهد (سقف هر جلسه ۵ دقیقه) — برای پروتوتایپ است؛ دقیقه‌های بیشتر پولی‌اند. replica اختصاصی از چهره‌ی واقعی به رضایت/آموزش ویدیویی همان شخص و پلن پولی نیاز دارد.
+
 ## گزینه‌های جایگزین
 
 - **Groq** (`SPEECH_PROVIDER=groq`): پلن Free ‏Groq با `GROQ_API_KEY` — شنیدن با `whisper-large-v3-turbo` و صحبت‌کردن با Orpheus انگلیسی.
@@ -47,6 +53,7 @@ curl -X POST http://localhost:8001/v1/models/speaches-ai/piper-fa_IR-amir-medium
 | `STT_MODEL` / `TTS_MODEL` / `TTS_VOICE` | وابسته به provider | بازنویسی مدل/صدا |
 | `ASSISTANT_LANGUAGE` | `en` (ابری) / `fa` (لوکال) | زبان مکالمه و شخصیت دستیار |
 | `GROQ_API_KEY` | — | فقط برای `SPEECH_PROVIDER=groq` |
+| `TAVUS_API_KEY` / `TAVUS_REPLICA_ID` / `TAVUS_PERSONA_ID` | — | چهره‌ی ویدیویی زنده Tavus (اختیاری؛ persona اختیاری است) |
 | `SPEECH_BASE_URL` | وابسته به provider | فقط برای providerهای OpenAI-compatible |
 | `LLM_BASE_URL` | `https://openrouter.ai/api/v1` | هر endpoint سازگار با OpenAI |
 | `LLM_API_KEY` / `OPENROUTER_API_KEY` | — | کلید LLM |

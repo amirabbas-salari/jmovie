@@ -26,6 +26,17 @@ LIVEKIT_API_SECRET=...
 
 > گزینه‌ها: `SPEECH_PROVIDER=groq` با پلن Free ‏Groq (کلید جدا از console.groq.com)، یا گفتار فارسی کاملاً لوکال با `SPEECH_PROVIDER=local` و Speaches/Piper — هر دو در `voice_agent/README.md` مستندند.
 
+## ۲٫۵) چهره‌ی ویدیویی Tavus (اختیاری)
+
+اگر چهره‌ی انسانی واقعی می‌خواهید: در https://app.tavus.io ثبت‌نام کنید، یک API Key بسازید و از replicaهای آماده یکی را انتخاب کنید؛ بعد فقط روی سرور ایجنت ست کنید:
+
+```
+TAVUS_API_KEY=...
+TAVUS_REPLICA_ID=...
+```
+
+پلن رایگان حدود ۲۰–۲۵ دقیقه مکالمه در ماه می‌دهد (سقف هر جلسه ۵ دقیقه). بدون این دو متغیر، دستیار با آواتار سه‌بعدی داخلی کار می‌کند و هیچ‌چیز از کار نمی‌افتد.
+
 ## ۳) LLM (OpenAI-compatible)
 
 پیش‌فرض همان OpenRouter سایت است:
