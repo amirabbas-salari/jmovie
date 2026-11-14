@@ -39,11 +39,32 @@ User = get_user_model()
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 
+# نکته: simplejwt خطای «حساب پیدا نشد» را با AuthenticationFailed خودِ DRF
+# پرتاب می‌کند (نه زیرکلاس simplejwt)؛ پس همان کلاس پایه گرفته می‌شود.
+from rest_framework.exceptions import AuthenticationFailed as JwtAuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+
+class PersianTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """پیام خطای لاگین فارسی و یکدست: چه نام کاربری وجود نداشته باشد چه
+    رمز اشتباه باشد، عمداً یک پیام واحد برمی‌گردد (لو ندادن این‌که کدام
+    اشتباه است، جلوی حدس‌زدن حساب‌های موجود را می‌گیرد)."""
+
+    def validate(self, attrs):
+        try:
+            return super().validate(attrs)
+        except JwtAuthenticationFailed:
+            raise JwtAuthenticationFailed(
+                "نام کاربری یا رمز عبور اشتباه است."
+            )
+
+
 class ThrottledTokenObtainPairView(TokenObtainPairView):
     """ویوی پیش‌فرض simplejwt هیچ سقف تلاشی ندارد؛ اینجا scope لاگین
     (۱۵ تلاش در دقیقه به‌ازای هر IP — settings) رویش اعمال می‌شود تا
     حدس‌زدن پسورد (brute-force/credential stuffing) عملاً ممکن نباشد."""
 
+    serializer_class = PersianTokenObtainPairSerializer
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"
 

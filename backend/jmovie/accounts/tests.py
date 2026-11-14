@@ -104,3 +104,81 @@ class MyListsApiTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["favorite"]["series"], [self.series.id])
         self.assertEqual(res.data["favorite"]["movie"], [])
+
+
+class AuthErrorMessagesTest(TestCase):
+    """پیام‌های خطای فارسی و قابل نمایش برای فرم‌های ورود/ثبت‌نام."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username="authuser", email="auth@test.ir", password="Str0ng!Pass123"
+        )
+
+    def test_login_wrong_password_returns_persian_error(self):
+        res = self.client.post(
+            "/api/token/",
+            {"username": "authuser", "password": "wrong-pass"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("اشتباه", res.data["detail"])
+
+    def test_login_unknown_user_returns_same_persian_error(self):
+        res = self.client.post(
+            "/api/token/",
+            {"username": "no_such_user", "password": "whatever1"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("اشتباه", res.data["detail"])
+
+    def test_login_success_returns_tokens(self):
+        res = self.client.post(
+            "/api/token/",
+            {"username": "authuser", "password": "Str0ng!Pass123"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("access", res.data)
+        self.assertIn("refresh", res.data)
+
+    def test_register_duplicate_username_persian_error(self):
+        res = self.client.post("/accounts/register/", {
+            "username": "authuser", "email": "new@test.ir",
+            "password": "Str0ng!Pass123", "password2": "Str0ng!Pass123",
+        }, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("قبلاً ثبت شده", str(res.data["username"][0]))
+
+    def test_register_duplicate_email_persian_error(self):
+        res = self.client.post("/accounts/register/", {
+            "username": "another", "email": "auth@test.ir",
+            "password": "Str0ng!Pass123", "password2": "Str0ng!Pass123",
+        }, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("قبلاً ثبت شده", str(res.data["email"][0]))
+
+    def test_register_weak_password_persian_error(self):
+        res = self.client.post("/accounts/register/", {
+            "username": "weakuser", "email": "weak@test.ir",
+            "password": "123", "password2": "123",
+        }, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("کوتاه", str(res.data["password"][0]))
+
+    def test_register_password_mismatch_persian_error(self):
+        res = self.client.post("/accounts/register/", {
+            "username": "mismatch", "email": "mm@test.ir",
+            "password": "Str0ng!Pass123", "password2": "Str0ng!Pass124",
+        }, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("مطابقت", str(res.data["password2"][0]))
+
+    def test_register_success(self):
+        res = self.client.post("/accounts/register/", {
+            "username": "newuser", "email": "new2@test.ir",
+            "password": "Str0ng!Pass123", "password2": "Str0ng!Pass123",
+        }, format="json")
+        self.assertEqual(res.status_code, 201)
+        self.assertTrue(User.objects.filter(username="newuser").exists())

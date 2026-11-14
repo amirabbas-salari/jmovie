@@ -74,7 +74,11 @@ api.interceptors.response.use(
   err => {
     const originalRequest = err.config
 
-    if (err.response?.status === 401 && !originalRequest._retry) {
+    // خطای 401 خودِ اندپوینت‌های توکن (لاگین/رفرش) نباید وارد چرخه‌ی رفرش
+    // شود: قبلاً رمز اشتباه → تلاش برای رفرش → ریدایرکت به /login و ریلود
+    // صفحه، و کاربر هیچ‌وقت پیام «رمز اشتباه است» را نمی‌دید.
+    const isTokenRequest = (originalRequest?.url || "").includes("/api/token/")
+    if (err.response?.status === 401 && !originalRequest._retry && !isTokenRequest) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject })
