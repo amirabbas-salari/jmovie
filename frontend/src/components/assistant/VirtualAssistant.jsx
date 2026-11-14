@@ -106,10 +106,12 @@ export default function VirtualAssistant() {
   const [liveCaption, setLiveCaption] = useState('')
   const [notice, setNotice] = useState('')
   const [avatarVideoActive, setAvatarVideoActive] = useState(false)
+  const [avatarHint, setAvatarHint] = useState('')
 
   const sessionIdRef = useRef(makeSessionId())
   const roomRef = useRef(null)
   const videoContainerRef = useRef(null)
+  const avatarTimerRef = useRef(null)
   const recognizerRef = useRef(null)
   const amplitudeRef = useRef(0)
   const audioCtxRef = useRef(null)
@@ -209,8 +211,11 @@ export default function VirtualAssistant() {
 
   const endLiveKit = useCallback(async () => {
     stopAmplitudeLoop()
+    if (avatarTimerRef.current) window.clearTimeout(avatarTimerRef.current)
+    avatarTimerRef.current = null
     if (videoContainerRef.current) videoContainerRef.current.replaceChildren()
     setAvatarVideoActive(false)
+    setAvatarHint('')
     if (roomRef.current) {
       try {
         await roomRef.current.disconnect()
@@ -238,9 +243,23 @@ export default function VirtualAssistant() {
           const data = JSON.parse(text)
           if (data.type === 'assistant_state' && STATE_LABELS[data.state]) {
             setStateSafe(data.state)
-          } else if (data.type === 'assistant_avatar' && data.mode === '3d') {
-            // ایجنت گفته چهره‌ی ویدیویی ندارد؛ آواتار سه‌بعدی می‌ماند
-            setAvatarVideoActive(false)
+          } else if (data.type === 'assistant_avatar') {
+            if (data.mode === 'tavus') {
+              // ایجنت چهره‌ی زنده را شروع کرده؛ اگر ترک ویدیو دیر برسد خبر می‌دهیم
+              setAvatarHint('در حال اتصال چهره‌ی زنده…')
+              if (avatarTimerRef.current) window.clearTimeout(avatarTimerRef.current)
+              avatarTimerRef.current = window.setTimeout(() => {
+                setAvatarHint(
+                  'چهره‌ی ویدیویی وصل نشد. لاگ ایجنت، درستی کلید و آیدی Tavus و سهمیه‌ی حسابتان را بررسی کنید.',
+                )
+              }, 15000)
+            } else {
+              // حالت سه‌بعدی؛ اگر Tavus خطا داده باشد دلیلش را نشان می‌دهیم
+              setAvatarVideoActive(false)
+              if (data.detail) {
+                setAvatarHint(`چهره‌ی Tavus فعال نشد: ${data.detail}`)
+              }
+            }
           } else if (data.type === 'assistant_cards' && Array.isArray(data.titles)) {
             setCards(data.titles)
           }
@@ -261,18 +280,32 @@ export default function VirtualAssistant() {
         }
       })
 
+      const attachVideoTrack = (track) => {
+        const container = videoContainerRef.current
+        if (!container) return
+        const el = track.attach()
+        el.style.width = '100%'
+        el.style.height = '100%'
+        el.style.objectFit = 'cover'
+        el.setAttribute('playsinline', 'true')
+        container.replaceChildren(el)
+        if (avatarTimerRef.current) window.clearTimeout(avatarTimerRef.current)
+        avatarTimerRef.current = null
+        setAvatarHint('')
+        setAvatarVideoActive(true)
+      }
+
+      // اگر ترک ویدیو قبل از آماده‌شدن شنونده‌ها منتشر شده باشد از دست نمی‌رود
+      room.on(RoomEvent.TrackPublished, (publication) => {
+        if (publication.kind === Track.Kind.Video) {
+          publication.setSubscribed(true)
+        }
+      })
+
       room.on(RoomEvent.TrackSubscribed, (track) => {
         if (track.kind === Track.Kind.Video) {
           // چهره‌ی ویدیویی زنده (مثل Tavus) روی آواتار سه‌بعدی می‌نشیند
-          const container = videoContainerRef.current
-          if (container) {
-            const el = track.attach()
-            el.style.width = '100%'
-            el.style.height = '100%'
-            el.style.objectFit = 'cover'
-            container.replaceChildren(el)
-            setAvatarVideoActive(true)
-          }
+          attachVideoTrack(track)
           return
         }
         if (track.kind === Track.Kind.Audio) {
@@ -299,6 +332,13 @@ export default function VirtualAssistant() {
       })
 
       await room.connect(url, token)
+      // ترک ویدیویی که پیش از اتصال ما منتشر شده باشد را هم می‌گیریم
+      room.remoteParticipants.forEach((participant) => {
+        participant.videoTrackPublications.forEach((publication) => {
+          publication.setSubscribed(true)
+          if (publication.track) attachVideoTrack(publication.track)
+        })
+      })
       // میکروفون فقط بعد از اقدام صریح کاربر (همین کلیک) روشن می‌شود
       await room.localParticipant.setMicrophoneEnabled(true)
       setConnected(true)
@@ -509,7 +549,9 @@ export default function VirtualAssistant() {
         {/* چهره‌ی ویدیویی زنده (Tavus) — وقتی ترک ویدیو برسد روی آواتار سه‌بعدی می‌آید */}
         <div
           ref={videoContainerRef}
-          className={`absolute inset-0 ${avatarVideoActive ? '' : 'hidden'}`}
+          className={`absolute inset-0 transition-opacity duration-500 ${
+            avatarVideoActive ? 'opacity-100' : 'pointer-events-none opacity-0'
+          }`}
           aria-hidden={!avatarVideoActive}
         />
         <span
@@ -526,6 +568,12 @@ export default function VirtualAssistant() {
           {STATE_LABELS[voiceState]}
         </span>
       </div>
+
+      {avatarHint && (
+        <p className="shrink-0 border-b border-white/5 px-4 py-2 text-[11px] leading-5 text-amber-200/90">
+          {avatarHint}
+        </p>
+      )}
 
       {/* متن مکالمه و کارت‌ها */}
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
