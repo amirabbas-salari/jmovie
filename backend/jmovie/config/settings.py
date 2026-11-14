@@ -156,6 +156,10 @@ REST_FRAMEWORK = {
         "ai_chat": "60/hour",
         # فرم‌های عمومی صفحه‌ی حمایت/پشتیبانی؛ سقف روی IP ضد اسپم است.
         "support": "10/hour",
+        # دستیار سینمایی مجازی: صدور توکن LiveKit و پیام fallback مرورگری
+        # برای مهمان هم باز است؛ سقف ساعتی جلوی سوءاستفاده از سهمیه‌ی
+        # رایگان LiveKit Cloud را می‌گیرد.
+        "assistant": "60/hour",
     },
     
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.StandardResultsSetPagination',
