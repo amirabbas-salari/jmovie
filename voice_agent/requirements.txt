@@ -1,8 +1,8 @@
 # ایجنت صوتی دستیار سینمایی (LiveKit Agents) — سرویس پایتون مستقل از جنگو
 # نصب:  pip install -r requirements.txt
 # اجرا:  python agent.py dev   (توسعه)  |  python agent.py start (production)
-# گفتار (STT/TTS) از سرور لوکال Speaches می‌آید (docker-compose.speech.yml) و
-# از مسیر پلاگین OpenAI-compatible وصل می‌شود؛ پلاگین ابری لازم نیست.
+# گفتار پیش‌فرض LiveKit Inference است (داخل خود livekit-agents؛ پلاگین جدا
+# نمی‌خواهد). پلاگین OpenAI فقط برای providerهای جایگزین groq/local است.
 livekit-agents>=1.0,<2
 livekit-plugins-openai>=1.0,<2
 livekit-plugins-silero>=1.0,<2

@@ -1,15 +1,16 @@
 """ایجنت صوتی دستیار سینمایی مووی‌ورس (LiveKit Agents، پایپ‌لاین آبشاری).
 
 جریان مکالمه:
-    میکروفون کاربر → LiveKit → STT ابری (Whisper روی Groq)
+    میکروفون کاربر → LiveKit → STT ابری (LiveKit Inference)
     → LLM (OpenAI-compatible؛ پیش‌فرض OpenRouter)
     → ابزارهای کاتالوگ جنگو (فقط از /ai/assistant/tool/ با سکرت داخلی)
-    → TTS ابری (Orpheus روی Groq) → بلندگوی کاربر
+    → TTS ابری (LiveKit Inference) → بلندگوی کاربر
 
-پشته‌ی گفتار ابری و کاملاً رایگان است (پلن Free سرویس Groq، بدون کارت):
-شنیدن با whisper-large-v3 و صحبت‌کردن با Orpheus انگلیسی. گزینه‌ی
-جایگزین با SPEECH_PROVIDER=local: سرور خودمیزبان Speaches و Piper
-فارسی (docker-compose.speech.yml). جزئیات: voice_agent/README.md.
+پشته‌ی گفتار پیش‌فرض، LiveKit Inference است: بدون هیچ حساب/کلید جدا،
+با همان اعتبار LiveKit Cloud کار می‌کند و در پلن رایگان Build ماهانه
+اعتبار Inference دارد (شنیدن Deepgram، صحبت‌کردن Cartesia). گزینه‌های
+جایگزین با SPEECH_PROVIDER: ‏groq (پلن Free ‏Groq) و local (سرور
+خودمیزبان Speaches و Piper فارسی). جزئیات: voice_agent/README.md.
 
 حالت‌های آواتار (listening/thinking/speaking/idle) و کارت‌های پیشنهاد
 از روی دیتاچنل LiveKit برای فرانت ارسال می‌شوند تا آواتار سه‌بعدی و
@@ -26,7 +27,7 @@ import os
 
 import httpx
 from livekit import agents
-from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, function_tool
+from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, function_tool, inference
 from livekit.plugins import openai, silero
 
 logger = logging.getLogger("jmovie-voice-agent")
@@ -38,17 +39,26 @@ DJANGO_API_BASE = os.getenv("JMOVIE_API_BASE", "http://localhost:8000").rstrip("
 INTERNAL_SECRET = os.getenv("ASSISTANT_INTERNAL_SECRET", "")
 
 # ---------------------------------------------------------------------------
-# پشته‌ی گفتار (STT/TTS) — ابریِ رایگان (Groq) یا لوکال (Speaches)
-# هر دو پشت API سازگار با OpenAI هستند؛ فقط preset عوض می‌شود.
-#   groq  (پیش‌فرض): پلن Free ‏Groq بدون کارت — Whisper برای شنیدن و
-#          Orpheus انگلیسی برای صحبت‌کردن. کلید: GROQ_API_KEY
+# پشته‌ی گفتار (STT/TTS) — ارائه‌دهنده با SPEECH_PROVIDER انتخاب می‌شود:
+#   livekit (پیش‌فرض): ‏LiveKit Inference با همان کلیدهای LiveKit Cloud؛
+#          هیچ حساب سومی لازم نیست و در پلن رایگان Build اعتبار ماهانه دارد.
+#   groq:  پلن Free ‏Groq — Whisper برای شنیدن و Orpheus انگلیسی برای
+#          صحبت‌کردن. کلید: GROQ_API_KEY
 #   local: سرور Speaches روی سرور خودتان با Piper فارسی (بدون کلید).
 # هر مقدار را می‌توان جداگانه با env بازنویسی کرد (STT_MODEL و ...).
 # ---------------------------------------------------------------------------
-SPEECH_PROVIDER = os.getenv("SPEECH_PROVIDER", "groq").strip().lower()
+SPEECH_PROVIDER = os.getenv("SPEECH_PROVIDER", "livekit").strip().lower()
 
 _SPEECH_PRESETS = {
+    "livekit": {
+        "kind": "inference",
+        "stt_model": "deepgram/nova-3",
+        "tts_model": "cartesia/sonic-3",
+        "tts_voice": "",  # خالی = صدای پیش‌فرض مدل؛ یا آیدی صدای Cartesia
+        "language": "en",
+    },
     "groq": {
+        "kind": "openai",
         "base_url": "https://api.groq.com/openai/v1",
         "api_key_env": "GROQ_API_KEY",
         "stt_model": "whisper-large-v3-turbo",
@@ -60,6 +70,7 @@ _SPEECH_PRESETS = {
         "language": "en",
     },
     "local": {
+        "kind": "openai",
         "base_url": "http://localhost:8001/v1",
         "api_key_env": "",
         "stt_model": "Systran/faster-whisper-large-v3",
@@ -69,20 +80,20 @@ _SPEECH_PRESETS = {
         "language": "fa",
     },
 }
-_SPEECH = _SPEECH_PRESETS.get(SPEECH_PROVIDER, _SPEECH_PRESETS["groq"])
+_SPEECH = _SPEECH_PRESETS.get(SPEECH_PROVIDER, _SPEECH_PRESETS["livekit"])
 
-SPEECH_BASE_URL = os.getenv("SPEECH_BASE_URL", _SPEECH["base_url"]).rstrip("/")
+SPEECH_BASE_URL = os.getenv("SPEECH_BASE_URL", _SPEECH.get("base_url", "")).rstrip("/")
 # برای سرور لوکال کلید واقعی لازم نیست؛ مقدار صوری فقط چون کلاینت
 # OpenAI مقدار خالی قبول نمی‌کند و سرور لوکال آن را بررسی نمی‌کند.
 SPEECH_API_KEY = (
     os.getenv("SPEECH_API_KEY", "")
-    or (os.getenv(_SPEECH["api_key_env"], "") if _SPEECH["api_key_env"] else "")
+    or (os.getenv(_SPEECH["api_key_env"], "") if _SPEECH.get("api_key_env") else "")
     or "speaches"
 )
 STT_MODEL = os.getenv("STT_MODEL", _SPEECH["stt_model"])
 TTS_MODEL = os.getenv("TTS_MODEL", _SPEECH["tts_model"])
 TTS_VOICE = os.getenv("TTS_VOICE", _SPEECH["tts_voice"])
-TTS_RESPONSE_FORMAT = os.getenv("TTS_RESPONSE_FORMAT", _SPEECH["tts_response_format"])
+TTS_RESPONSE_FORMAT = os.getenv("TTS_RESPONSE_FORMAT", _SPEECH.get("tts_response_format", "mp3"))
 # زبان مکالمه (شخصیت دستیار + زبان تشخیص گفتار)
 ASSISTANT_LANGUAGE = os.getenv("ASSISTANT_LANGUAGE", _SPEECH["language"]).strip().lower()
 STT_LANGUAGE = os.getenv("STT_LANGUAGE", ASSISTANT_LANGUAGE)
@@ -144,7 +155,10 @@ def require_config():
 
 
 def build_stt():
-    """شنیدن: Whisper ابری Groq (پیش‌فرض) یا Whisper لوکال Speaches."""
+    """شنیدن: LiveKit Inference (پیش‌فرض)، یا Groq/لوکال از مسیر OpenAI-compatible."""
+    if _SPEECH["kind"] == "inference":
+        # کلید جدا لازم نیست؛ از همان LIVEKIT_API_KEY/SECRET محیط استفاده می‌شود
+        return inference.STT(model=STT_MODEL, language=STT_LANGUAGE)
     return openai.STT(
         model=STT_MODEL,
         language=STT_LANGUAGE,
@@ -154,7 +168,12 @@ def build_stt():
 
 
 def build_tts():
-    """صحبت‌کردن: Orpheus ابری Groq (پیش‌فرض) یا Piper فارسی لوکال."""
+    """صحبت‌کردن: LiveKit Inference (پیش‌فرض)، یا Groq/لوکال از مسیر OpenAI-compatible."""
+    if _SPEECH["kind"] == "inference":
+        kwargs = {"language": ASSISTANT_LANGUAGE}
+        if TTS_VOICE:
+            kwargs["voice"] = TTS_VOICE
+        return inference.TTS(model=TTS_MODEL, **kwargs)
     return openai.TTS(
         model=TTS_MODEL,
         voice=TTS_VOICE,

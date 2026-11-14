@@ -3,33 +3,32 @@
 سرویس پایتون **مستقل از جنگو** که مکالمه‌ی صوتی بلادرنگ را اجرا می‌کند:
 
 ```
-کاربر → LiveKit → STT ابری (Whisper) → LLM + ابزار کاتالوگ جنگو → TTS ابری (Orpheus) → کاربر
+کاربر → LiveKit → STT ابری (LiveKit Inference) → LLM + ابزار کاتالوگ جنگو → TTS ابری (LiveKit Inference) → کاربر
 ```
 
 ابزارهای کاتالوگ (`search_movies`، `search_series`، `get_title_details`، `compare_titles`، `recommend_titles`، `search_similar_titles`) از مسیر `POST /ai/assistant/tool/` جنگو با هدر `X-Assistant-Secret` صدا زده می‌شوند؛ ایجنت هرگز مستقیم به دیتابیس وصل نمی‌شود و هیچ اطلاعاتی از خودش نمی‌سازد.
 
 حالت‌های آواتار (idle/listening/thinking/speaking) و کارت‌های پیشنهاد از دیتاچنل LiveKit (topic: `assistant`) برای فرانت ارسال می‌شوند. صدای خام کاربر لاگ یا ذخیره نمی‌شود.
 
-## پشته‌ی گفتار: ابری و رایگان (Groq) — پیش‌فرض
+## پشته‌ی گفتار: LiveKit Inference — پیش‌فرض
 
-هیچ‌چیز روی لوکال اجرا نمی‌شود؛ گفتار از پلن **Free سرویس Groq** می‌آید (بدون کارت بانکی، فقط ثبت‌نام و ساخت API Key از https://console.groq.com):
+هیچ حساب یا کلید سومی لازم نیست؛ گفتار با همان کلیدهای LiveKit Cloud شما کار می‌کند و مدل‌ها را LiveKit میزبانی می‌کند:
 
-- **شنیدن (STT):** ‏`whisper-large-v3-turbo` — بسیار سریع؛ فارسی را هم transcribe می‌کند
-- **صحبت‌کردن (TTS):** ‏`canopylabs/orpheus-v1-english` با صدای `autumn` — انگلیسی طبیعی
+- **شنیدن (STT):** ‏`deepgram/nova-3`
+- **صحبت‌کردن (TTS):** ‏`cartesia/sonic-3` (انگلیسی؛ زبان مکالمه هم انگلیسی می‌شود)
 
-چون صدای خروجی انگلیسی است، در این حالت زبان مکالمه هم انگلیسی می‌شود (`ASSISTANT_LANGUAGE=en` به‌صورت پیش‌فرض). سقف پلن رایگان برای پروتوتایپ مناسب است (TTS حدود ۱۰۰ درخواست در روز)؛ سقف‌ها را در کنسول Groq ببینید.
+در پلن رایگان **Build** ماهانه ۲٫۵۰ دلار اعتبار Inference هست (تقریباً ۵۰ دقیقه مکالمه) و وقتی تمام شود درخواست‌ها متوقف می‌شوند — هزینه‌ی غافلگیرکننده ندارد. مدل‌ها فقط با env عوض می‌شوند (مثلاً `STT_MODEL=assemblyai/universal-streaming` یا `TTS_MODEL=inworld/inworld-tts-1.5-max`).
 
 ```bash
-# فقط کافی است کلید رایگان Groq را داشته باشید:
-export GROQ_API_KEY=gsk_...
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python agent.py dev     # توسعه | python agent.py start برای production
 ```
 
-## گزینه‌ی جایگزین: گفتار لوکال فارسی (Speaches)
+## گزینه‌های جایگزین
 
-اگر بعداً گفتار فارسی و بدون وابستگی ابری خواستید: `SPEECH_PROVIDER=local` — سرور متن‌باز Speaches روی سرور خودتان (Whisper + Piper فارسی `fa_IR-amir`):
+- **Groq** (`SPEECH_PROVIDER=groq`): پلن Free ‏Groq با `GROQ_API_KEY` — شنیدن با `whisper-large-v3-turbo` و صحبت‌کردن با Orpheus انگلیسی.
+- **لوکال فارسی** (`SPEECH_PROVIDER=local`): سرور متن‌باز Speaches روی سرور خودتان با Piper فارسی (`fa_IR-amir`) و مکالمه‌ی فارسی:
 
 ```bash
 docker compose -f docker-compose.speech.yml up -d
@@ -41,14 +40,14 @@ curl -X POST http://localhost:8001/v1/models/speaches-ai/piper-fa_IR-amir-medium
 
 | متغیر | پیش‌فرض | توضیح |
 |---|---|---|
-| `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | — | از LiveKit Cloud (پلن رایگان) یا LiveKit سلف‌هاست |
+| `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | — | از LiveKit Cloud (پلن رایگان) یا LiveKit سلف‌هاست؛ برای گفتار Inference هم همان‌ها کافی‌اند |
 | `ASSISTANT_INTERNAL_SECRET` | — | سکرت مشترک با جنگو (ابزارهای کاتالوگ) |
 | `JMOVIE_API_BASE` | `http://localhost:8000` | آدرس بک‌اند جنگو |
-| `SPEECH_PROVIDER` | `groq` | `groq` (ابری رایگان) یا `local` (Speaches) |
-| `GROQ_API_KEY` | — | کلید پلن رایگان Groq (حالت ابری) |
-| `ASSISTANT_LANGUAGE` | `en` در ابری / `fa` در لوکال | زبان مکالمه و شخصیت دستیار |
+| `SPEECH_PROVIDER` | `livekit` | `livekit` (Inference) یا `groq` یا `local` |
 | `STT_MODEL` / `TTS_MODEL` / `TTS_VOICE` | وابسته به provider | بازنویسی مدل/صدا |
-| `SPEECH_BASE_URL` | وابسته به provider | بازنویسی آدرس API گفتار |
+| `ASSISTANT_LANGUAGE` | `en` (ابری) / `fa` (لوکال) | زبان مکالمه و شخصیت دستیار |
+| `GROQ_API_KEY` | — | فقط برای `SPEECH_PROVIDER=groq` |
+| `SPEECH_BASE_URL` | وابسته به provider | فقط برای providerهای OpenAI-compatible |
 | `LLM_BASE_URL` | `https://openrouter.ai/api/v1` | هر endpoint سازگار با OpenAI |
 | `LLM_API_KEY` / `OPENROUTER_API_KEY` | — | کلید LLM |
 | `LLM_MODEL` / `OPENROUTER_MODEL` | `openai/gpt-4o-mini` | مدل دارای tool calling |
