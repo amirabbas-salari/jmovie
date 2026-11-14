@@ -295,9 +295,16 @@ class MovieVerseAssistant(Agent):
     async def publish_state(self, state: str):
         await self._publish({"type": "assistant_state", "state": state})
 
-    async def publish_avatar_mode(self, mode: str):
-        """به فرانت می‌گوید چهره ویدیویی (tavus) فعال است یا آواتار سه‌بعدی (3d)."""
-        await self._publish({"type": "assistant_avatar", "mode": mode})
+    async def publish_avatar_mode(self, mode: str, detail: str = ""):
+        """به فرانت می‌گوید چهره ویدیویی (tavus) فعال است یا آواتار سه‌بعدی (3d).
+
+        در صورت خطا، خلاصه‌ی دلیل هم می‌رود تا کاربر به‌جای سکوت، علت را
+        داخل ویجت ببیند (بدون هیچ credential یا داده‌ی حساسی).
+        """
+        payload = {"type": "assistant_avatar", "mode": mode}
+        if detail:
+            payload["detail"] = detail[:180]
+        await self._publish(payload)
 
     async def _run_tool(self, tool: str, arguments: dict) -> str:
         await self.publish_state("thinking")
@@ -411,6 +418,10 @@ async def entrypoint(ctx: JobContext):
 
     # چهره‌ی ویدیویی Tavus (اگر کانفیگ شده باشد) — خرابی‌اش نباید مکالمه‌ی
     # صوتی را از کار بیندازد؛ فرانت در نبود ویدیو آواتار سه‌بعدی نشان می‌دهد.
+    logger.info(
+        "Tavus avatar: enabled=%s (api_key set=%s, replica_id set=%s)",
+        tavus_enabled(), bool(TAVUS_API_KEY), bool(TAVUS_REPLICA_ID),
+    )
     if tavus_enabled():
         try:
             avatar_kwargs = {
@@ -426,9 +437,9 @@ async def entrypoint(ctx: JobContext):
             await avatar.start(session, room=ctx.room)
             await assistant.publish_avatar_mode("tavus")
             logger.info("Tavus avatar started (replica=%s)", TAVUS_REPLICA_ID)
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             logger.warning("شروع آواتار Tavus ناموفق بود؛ ادامه بدون ویدیو", exc_info=True)
-            await assistant.publish_avatar_mode("3d")
+            await assistant.publish_avatar_mode("3d", detail=f"{type(exc).__name__}: {exc}")
     else:
         await assistant.publish_avatar_mode("3d")
 
