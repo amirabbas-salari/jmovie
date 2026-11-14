@@ -105,9 +105,11 @@ export default function VirtualAssistant() {
   const [input, setInput] = useState('')
   const [liveCaption, setLiveCaption] = useState('')
   const [notice, setNotice] = useState('')
+  const [avatarVideoActive, setAvatarVideoActive] = useState(false)
 
   const sessionIdRef = useRef(makeSessionId())
   const roomRef = useRef(null)
+  const videoContainerRef = useRef(null)
   const recognizerRef = useRef(null)
   const amplitudeRef = useRef(0)
   const audioCtxRef = useRef(null)
@@ -207,6 +209,8 @@ export default function VirtualAssistant() {
 
   const endLiveKit = useCallback(async () => {
     stopAmplitudeLoop()
+    if (videoContainerRef.current) videoContainerRef.current.replaceChildren()
+    setAvatarVideoActive(false)
     if (roomRef.current) {
       try {
         await roomRef.current.disconnect()
@@ -234,6 +238,9 @@ export default function VirtualAssistant() {
           const data = JSON.parse(text)
           if (data.type === 'assistant_state' && STATE_LABELS[data.state]) {
             setStateSafe(data.state)
+          } else if (data.type === 'assistant_avatar' && data.mode === '3d') {
+            // ایجنت گفته چهره‌ی ویدیویی ندارد؛ آواتار سه‌بعدی می‌ماند
+            setAvatarVideoActive(false)
           } else if (data.type === 'assistant_cards' && Array.isArray(data.titles)) {
             setCards(data.titles)
           }
@@ -254,12 +261,34 @@ export default function VirtualAssistant() {
         }
       })
 
-      room.on(RoomEvent.TrackSubscribed, (track, _publication, participant) => {
-        if (track.kind === Track.Kind.Audio && (participant.identity || '').startsWith('agent')) {
+      room.on(RoomEvent.TrackSubscribed, (track) => {
+        if (track.kind === Track.Kind.Video) {
+          // چهره‌ی ویدیویی زنده (مثل Tavus) روی آواتار سه‌بعدی می‌نشیند
+          const container = videoContainerRef.current
+          if (container) {
+            const el = track.attach()
+            el.style.width = '100%'
+            el.style.height = '100%'
+            el.style.objectFit = 'cover'
+            container.replaceChildren(el)
+            setAvatarVideoActive(true)
+          }
+          return
+        }
+        if (track.kind === Track.Kind.Audio) {
+          // صدای گوینده (ایجنت یا شرکت‌کننده‌ی آواتار) — هر ترک صوتی راه دور
           const el = track.attach()
           el.style.display = 'none'
           document.body.appendChild(el)
           if (track.mediaStreamTrack) startAmplitudeLoop(track.mediaStreamTrack)
+        }
+      })
+
+      room.on(RoomEvent.TrackUnsubscribed, (track) => {
+        if (track.kind === Track.Kind.Video) {
+          track.detach()
+          if (videoContainerRef.current) videoContainerRef.current.replaceChildren()
+          setAvatarVideoActive(false)
         }
       })
 
@@ -477,6 +506,12 @@ export default function VirtualAssistant() {
       {/* آواتار */}
       <div className="relative h-52 shrink-0 bg-[radial-gradient(circle_at_50%_30%,rgba(139,30,45,0.35),rgba(13,10,20,0.2)_60%)]">
         <AssistantAvatar state={voiceState} amplitudeRef={amplitudeRef} />
+        {/* چهره‌ی ویدیویی زنده (Tavus) — وقتی ترک ویدیو برسد روی آواتار سه‌بعدی می‌آید */}
+        <div
+          ref={videoContainerRef}
+          className={`absolute inset-0 ${avatarVideoActive ? '' : 'hidden'}`}
+          aria-hidden={!avatarVideoActive}
+        />
         <span
           className={`absolute bottom-3 right-1/2 translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-bold ${
             voiceState === 'error'
