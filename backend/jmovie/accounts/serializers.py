@@ -140,12 +140,71 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 # ---------------------------
 # User Register Serializer
 # ---------------------------
+# ترجمه‌ی پیام‌های اعتبارسنجی رمز عبور جنگو به فارسی برای فرم ثبت‌نام
+_PASSWORD_ERROR_FA = (
+    ("too short", "رمز عبور خیلی کوتاه است؛ حداقل ۸ نویسه وارد کنید."),
+    ("too common", "این رمز عبور خیلی رایج و قابل حدس است؛ رمز دیگری انتخاب کنید."),
+    ("entirely numeric", "رمز عبور نمی‌تواند فقط از عدد تشکیل شده باشد."),
+    ("too similar", "رمز عبور بیش از حد شبیه نام کاربری یا ایمیل شماست."),
+)
+
+
+def _fa_password_errors(exc):
+    messages = []
+    for msg in getattr(exc, "messages", [str(exc)]):
+        fa = next((fa for key, fa in _PASSWORD_ERROR_FA if key in str(msg)), None)
+        messages.append(fa or str(msg))
+    return messages
+
+
 class UserRegisterSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(required=False, allow_blank=True)
     last_name = serializers.CharField(required=False, allow_blank=True)
     phone = serializers.CharField(required=False, allow_blank=True)
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password = serializers.CharField(write_only=True, required=True)
     password2 = serializers.CharField(write_only=True, required=True)
+    # صریح تعریف می‌شوند تا پیام‌های یکتایی/فرمت فارسی باشند، نه پیش‌فرض انگلیسی DRF
+    username = serializers.CharField(
+        max_length=150,
+        error_messages={
+            "required": "نام کاربری الزامی است.",
+            "blank": "نام کاربری الزامی است.",
+            "unique": "این نام کاربری قبلاً ثبت شده است؛ نام دیگری انتخاب کنید یا وارد شوید.",
+        },
+    )
+    email = serializers.EmailField(
+        error_messages={
+            "required": "ایمیل الزامی است.",
+            "blank": "ایمیل الزامی است.",
+            "invalid": "ایمیل معتبر نیست.",
+            "unique": "این ایمیل قبلاً ثبت شده است؛ اگر حساب دارید وارد شوید.",
+        },
+    )
+
+    def validate_username(self, value):
+        value = value.strip()
+        if User.objects.filter(username__iexact=value).exists():
+            raise serializers.ValidationError(
+                "این نام کاربری قبلاً ثبت شده است؛ نام دیگری انتخاب کنید یا وارد شوید."
+            )
+        return value
+
+    def validate_email(self, value):
+        value = value.strip()
+        if value and User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError(
+                "این ایمیل قبلاً ثبت شده است؛ اگر حساب دارید وارد شوید."
+            )
+        return value
+
+    def validate_password(self, value):
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(_fa_password_errors(exc))
+        return value
 
     class Meta:
         model = User

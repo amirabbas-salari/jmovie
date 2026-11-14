@@ -1,11 +1,13 @@
-import { useState } from "react";
-import { User, Eye, EyeOff, ArrowLeft } from "lucide-react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { LifeBuoy, Loader2, Lock, LogIn, User } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { login } from "../../services/authService";
 import { saveTokens } from "../../utils/token";
 import { useAuth } from "../../context/AuthContext";
 import login_image from "../../assets/login-1.jpg";
 import { useSeo } from "../../seo/useSeo";
+import AuthShell, { GeneralError, PasswordField, TextField } from "./authShared";
+import { BRAND, parseApiErrors } from "./authUtils";
 
 function Login() {
   useSeo({
@@ -17,147 +19,115 @@ function Login() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const [showPassword, setShowPassword] = useState(false);
+  const { user, loading: authLoading, refreshUser } = useAuth();
   const from = location.state?.from || "/";
-  const [loginData, setLoginData] = useState({
-    username: "",
-    password: "",
-  });
 
-  const { refreshUser } = useAuth();
+  const [form, setForm] = useState({ username: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [generalError, setGeneralError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
-  const handleLoginChange = (e) => {
+  // اگر از قبل وارد شده، فرم را نشان نده
+  useEffect(() => {
+    if (!authLoading && user) navigate(from, { replace: true });
+  }, [authLoading, user, from, navigate]);
+
+  const change = (e) => {
     const { name, value } = e.target;
-    setLoginData((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({ ...prev, [name]: value }));
+    setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    setGeneralError("");
   };
 
-  const handleLoginSubmit = async (e) => {
+  const submit = async (e) => {
     e.preventDefault();
+    const errors = {};
+    if (!form.username.trim()) errors.username = "نام کاربری را وارد کنید.";
+    if (!form.password) errors.password = "رمز عبور را وارد کنید.";
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
 
-    if (!loginData.username || !loginData.password) {
-      alert("Please fill in all login fields.");
-      return;
-    }
-
+    setSubmitting(true);
+    setGeneralError("");
     try {
-      const data = await login(loginData.username, loginData.password);
+      const data = await login(form.username.trim(), form.password);
       saveTokens(data.access, data.refresh);
       await refreshUser();
       navigate(from, { replace: true });
-      // window.location.href = "/";
     } catch (err) {
-      console.error("Login error:", err.response?.data || err);
-      alert("Login failed: " + JSON.stringify(err.response?.data || {}));
+      const { general, fields } = parseApiErrors(err, "ورود ناموفق بود؛ دوباره تلاش کنید.");
+      // خطای اعتبارنامه (رمز اشتباه/حساب ناموجود) را هم زیر رمز عبور نشان بده
+      // هم به‌صورت بنر، تا کاربر حتماً متوجه شود.
+      if (err?.response?.status === 401) {
+        setFieldErrors({ password: general || "نام کاربری یا رمز عبور اشتباه است." });
+      } else {
+        setFieldErrors(fields);
+      }
+      setGeneralError(general);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#1e0c0d] text-white">
-      <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_bottom_left,[#08040d],transparent_28%),linear-gradient(90deg,#030b2f_0%,#020726_45%,#020726_100%)]">
+    <AuthShell
+      activeTab="login"
+      image={login_image}
+      imageAlt="ورود به مووی‌ورس"
+      title="خوش برگشتی! 👋"
+      subtitle="برای ادامه وارد حسابت شو تا به لیست تماشا، علاقه‌مندی‌ها و دانلودهای VIP دسترسی داشته باشی."
+    >
+      <form onSubmit={submit} noValidate className="space-y-4">
+        <GeneralError message={generalError} />
+
+        <TextField
+          icon={User}
+          type="text"
+          name="username"
+          value={form.username}
+          onChange={change}
+          placeholder="نام کاربری"
+          autoComplete="username"
+          autoFocus
+          error={fieldErrors.username}
+        />
+
+        <PasswordField
+          value={form.password}
+          onChange={change}
+          placeholder="رمز عبور"
+          autoComplete="current-password"
+          error={fieldErrors.password}
+          show={showPassword}
+          onToggleShow={() => setShowPassword((p) => !p)}
+        />
+
+        <div className="flex items-center justify-between text-sm">
+          <Link to="/support" className="inline-flex items-center gap-1.5 text-white/60 transition hover:text-white">
+            <LifeBuoy className="h-4 w-4" />
+            رمز عبورم را فراموش کرده‌ام
+          </Link>
+          <Link to="/register" className="font-semibold text-rose-300 transition hover:text-rose-200">
+            حساب ندارم؛ ثبت‌نام
+          </Link>
+        </div>
+
         <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="absolute left-5 top-5 z-20 text-white/80 transition hover:text-white"
+          type="submit"
+          disabled={submitting}
+          className={`flex w-full items-center justify-center gap-2 rounded-2xl ${BRAND} px-5 py-3.5 text-sm font-bold text-white shadow-[0_16px_40px_rgba(225,29,72,0.3)] transition hover:opacity-90 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60`}
         >
-          <ArrowLeft size={20} />
+          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
+          {submitting ? "در حال بررسی..." : "ورود به حساب"}
         </button>
 
-        <div className="mx-auto flex min-h-screen flex-col items-center gap-28 px-6 py-10 lg:flex-row lg:items-center lg:justify-center lg:px-10">
-          {/* Left Side */}
-          <div className="z-10 w-full max-w-sm lg:max-w-md">
-            <h1 className="mb-8 text-5xl font-semibold tracking-tight text-white lg:text-6xl">
-              مووی<span className="text-rose-500">ورس</span>
-            </h1>
-
-            <br />
-
-            <div className="mb-14 flex items-center gap-10 text-xl font-semibold uppercase">
-              <button
-                type="button"
-                className="relative pb-2 text-white transition"
-              >
-                ورود
-                <span className="absolute bottom-0 left-0 h-[3px] w-full rounded-full bg-rose-500" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => navigate("/register")}
-                className="relative pb-2 text-white/75 transition hover:text-white"
-              >
-                ثبت نام
-              </button>
-            </div>
-
-            <form onSubmit={handleLoginSubmit} className="space-y-8">
-              <div className="space-y-6">
-                <div className="relative">
-                  <input
-                    type="text"
-                    name="username"
-                    value={loginData.username}
-                    onChange={handleLoginChange}
-                    placeholder="نام کاربری"
-                    className="w-full rounded-2xl border border-white/50 bg-transparent px-5 py-4 pr-12 text-white placeholder:text-white/45 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-                  />
-                  <User
-                    size={18}
-                    className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-white"
-                  />
-                </div>
-
-                <div className="relative">
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    name="password"
-                    value={loginData.password}
-                    onChange={handleLoginChange}
-                    placeholder="رمز عبور"
-                    className="w-full rounded-2xl border border-white/50 bg-transparent px-5 py-4 pr-12 text-white placeholder:text-white/45 outline-none transition focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="text-center">
-                <button
-                  type="button"
-                  className="text-sm text-white/70 transition hover:text-white"
-                >
-                  رمز عبورم را فراموش کرده‌ام
-                </button>
-              </div>
-
-              <div className="pt-3">
-                <button
-                  type="submit"
-                  className="mx-auto block w-full max-w-[170px] rounded-xl bg-rose-500 px-6 py-3 text-sm font-medium uppercase tracking-wide text-white shadow-lg shadow-rose-500/20 transition hover:bg-rose-800 focus:outline-none focus:ring-2 focus:ring-rose-300"
-                >
-                  ورود
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Right Side Image */}
-          <div className="">
-            <div className="overflow-hidden rounded-[28px] bg-[#06113a] shadow-2xl">
-              <img
-                src={login_image}
-                alt="Fantasy visual"
-                className="h-[300px] w-full max-w-[1300px] object-cover md:h-[500px] lg:h-[500px] xl:h-[800px] mx-auto"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+        <p className="flex items-center justify-center gap-1.5 pt-1 text-center text-[11px] text-white/40">
+          <Lock className="h-3.5 w-3.5" />
+          اطلاعات ورود شما به‌صورت امن ارسال می‌شود.
+        </p>
+      </form>
+    </AuthShell>
   );
 }
 

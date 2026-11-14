@@ -1,13 +1,16 @@
-import { useState, useMemo } from "react";
-import { User, ArrowLeft, Image as ImageIcon } from "lucide-react";
-import { register } from "../../services/authService";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle2, ChevronRight, ImagePlus, Loader2, Lock, Mail, PartyPopper, SkipForward, User, UserPlus,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import SideImages from "../../components/ui/SideImages";
+import { login, register } from "../../services/authService";
+import { saveTokens } from "../../utils/token";
+import { useAuth } from "../../context/AuthContext";
 import { useSeo } from "../../seo/useSeo";
-
+import AuthShell, { GeneralError, PasswordField, TextField } from "./authShared";
+import { BRAND, parseApiErrors, passwordStrength } from "./authUtils";
 
 import for_login from "../../assets/for-login.webp";
-// import کردن همه آواتارها
 import avatar1 from "../../assets/avatars/1.webp";
 import avatar2 from "../../assets/avatars/2.webp";
 import avatar3 from "../../assets/avatars/3.webp";
@@ -18,6 +21,7 @@ import avatar7 from "../../assets/avatars/7.webp";
 import avatar8 from "../../assets/avatars/8.webp";
 import avatar9 from "../../assets/avatars/9.webp";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function Register() {
   useSeo({
@@ -28,368 +32,303 @@ function Register() {
   });
 
   const navigate = useNavigate();
-  const [step, setStep] = useState("auth");
-  const [loading, setLoading] = useState(false);
-  const [selectedAvatar, setSelectedAvatar] = useState(null);
-  const [uploadedAvatar, setUploadedAvatar] = useState(null);
+  const { user, loading: authLoading, refreshUser } = useAuth();
+
+  const [step, setStep] = useState("auth"); // auth | avatar | success
+  const [form, setForm] = useState({ username: "", email: "", password: "", confirmPassword: "" });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [generalError, setGeneralError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [selectedAvatar, setSelectedAvatar] = useState(null); // {type: 'url'|'file', value, file?}
 
   const avatarList = useMemo(
-    () => [
-      avatar1,
-      avatar2,
-      avatar3,
-      avatar4,
-      avatar5,
-      avatar6,
-      avatar7,
-      avatar8,
-      avatar9,
-    ],
+    () => [avatar1, avatar2, avatar3, avatar4, avatar5, avatar6, avatar7, avatar8, avatar9],
     []
   );
+  const strength = passwordStrength(form.password);
 
-  const [signupData, setSignupData] = useState({
-    username: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-  });
+  useEffect(() => {
+    if (!authLoading && user) navigate("/", { replace: true });
+  }, [authLoading, user, navigate]);
 
-  const handleSignupChange = (e) => {
+  const change = (e) => {
     const { name, value } = e.target;
-    setSignupData((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({ ...prev, [name]: value }));
+    setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+    setGeneralError("");
   };
 
-  const handleSignupNext = (e) => {
+  const validateAuthStep = () => {
+    const errors = {};
+    const username = form.username.trim();
+    if (!username) errors.username = "نام کاربری را وارد کنید.";
+    else if (username.length < 3) errors.username = "نام کاربری باید حداقل ۳ نویسه باشد.";
+    else if (/\s/.test(username)) errors.username = "نام کاربری نمی‌تواند فاصله داشته باشد.";
+    if (!form.email.trim()) errors.email = "ایمیل را وارد کنید.";
+    else if (!EMAIL_RE.test(form.email.trim())) errors.email = "ایمیل معتبر نیست.";
+    if (!form.password) errors.password = "رمز عبور را وارد کنید.";
+    else if (form.password.length < 8) errors.password = "رمز عبور باید حداقل ۸ نویسه باشد.";
+    if (!form.confirmPassword) errors.confirmPassword = "تکرار رمز عبور را وارد کنید.";
+    else if (form.password !== form.confirmPassword) errors.confirmPassword = "رمز عبور و تکرار آن با هم مطابقت ندارند.";
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const goAvatarStep = (e) => {
     e.preventDefault();
-
-    if (
-      !signupData.username.trim() ||
-      !signupData.email.trim() ||
-      !signupData.password.trim() ||
-      !signupData.confirmPassword.trim()
-    ) {
-      alert("Please fill in all signup fields.");
-      return;
-    }
-
-    if (signupData.password !== signupData.confirmPassword) {
-      alert("Passwords do not match.");
-      return;
-    }
-
-    setStep("avatar");
+    if (validateAuthStep()) setStep("avatar");
   };
 
   const handleUploadAvatar = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const previewUrl = URL.createObjectURL(file);
-
-    setUploadedAvatar({ file, previewUrl });
-    setSelectedAvatar({ type: "file", value: previewUrl, file });
+    setSelectedAvatar({ type: "file", value: URL.createObjectURL(file), file });
+    e.target.value = "";
   };
 
-  const handleFinalSignup = async (e) => {
-    e.preventDefault();
-
-    if (
-      !signupData.username ||
-      !signupData.email ||
-      !signupData.password ||
-      !signupData.confirmPassword
-    ) {
-      alert("Please fill in all signup fields.");
+  const finalSignup = async (e) => {
+    e?.preventDefault();
+    if (!validateAuthStep()) {
+      setStep("auth");
       return;
     }
-
-    if (signupData.password !== signupData.confirmPassword) {
-      alert("Passwords do not match.");
-      return;
-    }
-
-    if (!selectedAvatar) {
-      alert("Please choose your profile avatar.");
-      return;
-    }
-
+    setSubmitting(true);
+    setGeneralError("");
     try {
       const formData = new FormData();
-
-      formData.append("username", signupData.username);
-      formData.append("email", signupData.email);
-      formData.append("password", signupData.password);
-      formData.append("password2", signupData.confirmPassword);
-
-      if (selectedAvatar.type === "file" && selectedAvatar.file) {
+      formData.append("username", form.username.trim());
+      formData.append("email", form.email.trim());
+      formData.append("password", form.password);
+      formData.append("password2", form.confirmPassword);
+      if (selectedAvatar?.type === "file" && selectedAvatar.file) {
         formData.append("avatar", selectedAvatar.file);
-      } else if (selectedAvatar.type === "url" && selectedAvatar.value) {
-        const response = await fetch(selectedAvatar.value);
-        const blob = await response.blob();
-        const fileName = selectedAvatar.value.split("/").pop() || "avatar.jpg";
-        const file = new File([blob], fileName, { type: blob.type });
-        formData.append("avatar", file);
+      } else if (selectedAvatar?.type === "url" && selectedAvatar.value) {
+        try {
+          const resp = await fetch(selectedAvatar.value);
+          const blob = await resp.blob();
+          const fileName = selectedAvatar.value.split("/").pop() || "avatar.webp";
+          formData.append("avatar", new File([blob], fileName, { type: blob.type }));
+        } catch { /* آواتار پیش‌فرض اختیاری است؛ بدون آن ادامه بده */ }
       }
-
       await register(formData);
-      setStep("success");
+
+      // ورود خودکار بعد از ثبت‌نام موفق؛ اگر نشد، صفحه‌ی موفقیت با دکمه‌ی ورود
+      try {
+        const data = await login(form.username.trim(), form.password);
+        saveTokens(data.access, data.refresh);
+        await refreshUser();
+        navigate("/", { replace: true });
+      } catch {
+        setStep("success");
+      }
     } catch (err) {
-      console.error("Signup error:", err.response?.data || err);
-      alert("Signup failed: " + JSON.stringify(err.response?.data || {}));
+      const { general, fields } = parseApiErrors(err, "ثبت‌نام ناموفق بود؛ دوباره تلاش کنید.");
+      setFieldErrors(fields);
+      setGeneralError(general);
+      // خطاهای فیلدهای مرحله‌ی اول (نام کاربری تکراری و…) باید همان‌جا دیده شوند
+      if (fields.username || fields.email || fields.password || fields.password2) setStep("auth");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-
+  // ---------- مرحله‌ی موفقیت (فقط وقتی ورود خودکار ممکن نشده) ----------
   if (step === "success") {
     return (
-      <div className="max-h-screen overflow-hidden bg-[#020826] text-white">
-        <div className="overflow-hidden relative min-h-screen bg-[radial-gradient(circle_at_bottom_left,rgba(60,40,120,0.35),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(40,60,140,0.30),transparent_30%),linear-gradient(180deg,#0a1240_0%,#050a26_55%,#020618_100%)] px-5 py-5">
-          <SideImages showMinions={false}/>
-
-          <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center text-center mt-28">
-            <div className="flex h-60 w-60 items-center justify-center overflow-hidden rounded-full bg-[#2d9aed] ring-1 ring-[#4aa3ff]/70 shadow-[0_0_22px_rgba(45,154,237,0.5)]">
-              {selectedAvatar ? (
-                <img
-                  src={selectedAvatar.value}
-                  alt="Profile avatar"
-                  className="h-full w-full rounded-full object-cover"
-                />
-              ) : (
-                <User size={96} className="text-white/90" />
-              )}
-            </div>
-
-            <p className="mt-5 text-base font-medium text-white/85">
-              {signupData.username || "کاربر"}
-            </p>
-
-            <h1 className="mt-16 text-3xl font-bold tracking-tight text-white md:text-4xl">
-              حساب کاربری شما با موفقیت ایجاد شد
-            </h1>
-
-            <button
-              type="button"
-              onClick={() => navigate("/login")}
-              className="mt-14 w-44 rounded-xl bg-[#3498eb] px-6 py-3 text-sm font-medium uppercase tracking-wide text-white shadow-lg transition hover:bg-[#2587d8]"
-            >
-              ورود
-            </button>
-
-
+      <AuthShell
+        activeTab="register"
+        image={for_login}
+        imageAlt="ثبت‌نام در مووی‌ورس"
+        title="حسابت ساخته شد! 🎉"
+        subtitle="ثبت‌نام با موفقیت انجام شد. حالا می‌توانی وارد حسابت شوی."
+      >
+        <div className="flex flex-col items-center text-center">
+          <div className={`flex h-28 w-28 items-center justify-center overflow-hidden rounded-full ${BRAND} shadow-[0_20px_50px_rgba(225,29,72,0.35)] ring-4 ring-white/10`}>
+            {selectedAvatar
+              ? <img src={selectedAvatar.value} alt="آواتار شما" className="h-full w-full object-cover" />
+              : <PartyPopper className="h-12 w-12 text-white" />}
           </div>
-        </div>
-      </div>
-    );
-  }
-
-
-  else if (step === "avatar") {
-    return (
-      <div className="min-h-screen overflow-hidden bg-[#020826] text-white">
-        <div className="relative min-h-screen bg-[radial-gradient(circle_at_bottom_left,rgba(87,47,174,0.48),transparent_30%),linear-gradient(90deg,#040b2c_0%,#020720_45%,#020720_100%)] px-5 py-5">
+          <p className="mt-4 inline-flex items-center gap-2 text-sm text-white/80">
+            <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+            {form.username} عزیز، به مووی‌ورس خوش آمدی
+          </p>
           <button
             type="button"
-            onClick={() => setStep("auth")}
-            className="absolute left-5 top-5 z-20 text-white/80 transition hover:text-white"
+            onClick={() => navigate("/login")}
+            className={`mt-6 w-full rounded-2xl ${BRAND} px-5 py-3.5 text-sm font-bold text-white shadow-[0_16px_40px_rgba(225,29,72,0.3)] transition hover:opacity-90`}
           >
-            <ArrowLeft size={22} />
+            ورود به حساب
           </button>
-
-          <div className="mx-auto flex min-h-screen max-w-5xl flex-col items-center pt-14">
-            <h1 className="mb-10 text-center text-4xl font-normal tracking-wide text-white md:text-5xl">
-              سلام {signupData.username || "کاربر"}
-            </h1>
-
-            <div className="mb-16 flex h-32 w-32 items-center justify-center rounded-full bg-[#2d9aed] shadow-[0_0_18px_rgba(45,154,237,0.45)]">
-              {selectedAvatar ? (
-                <img
-                  src={selectedAvatar.value}
-                  alt="Selected avatar"
-                  className="h-full w-full rounded-full object-cover"
-                />
-              ) : (
-                <User size={92} className="text-white/90" />
-              )}
-            </div>
-
-            <p className="mb-8 text-lg font-semibold text-white/95">
-              پروفایل خود را انتخاب کنید
-            </p>
-
-            <div className="grid grid-cols-3 gap-x-8 gap-y-8 sm:grid-cols-4 md:grid-cols-5 md:gap-x-12">
-              {avatarList.map((avatar, index) => {
-                const isSelected =
-                  selectedAvatar?.type === "url" &&
-                  selectedAvatar?.value === avatar;
-
-                return (
-                  <button
-                    key={avatar}
-                    type="button"
-                    onClick={() =>
-                      setSelectedAvatar({ type: "url", value: avatar })
-                    }
-                    className={`h-24 w-24 overflow-hidden rounded-full transition md:h-28 md:w-28 ${
-                      isSelected
-                        ? "scale-105 ring-4 ring-[#2d9aed] ring-offset-4 ring-offset-[#020826]"
-                        : "ring-2 ring-transparent hover:scale-105 hover:ring-[#2d9aed]/70"
-                    }`}
-                  >
-                    <img
-                      src={avatar}
-                      alt={`avatar-${index + 1}`}
-                      className="h-full w-full object-cover"
-                    />
-                  </button>
-                );
-              })}
-
-              <label
-                className={`flex h-24 w-24 cursor-pointer items-center justify-center rounded-full bg-[#2d9aed] transition md:h-28 md:w-28 ${
-                  selectedAvatar?.type === "file"
-                    ? "scale-105 ring-4 ring-[#2d9aed] ring-offset-4 ring-offset-[#020826]"
-                    : "hover:scale-105"
-                }`}
-              >
-                {uploadedAvatar ? (
-                  <img
-                    src={uploadedAvatar.previewUrl}
-                    alt="Uploaded avatar"
-                    className="h-full w-full rounded-full object-cover"
-                  />
-                ) : (
-                  <ImageIcon size={52} className="text-white" />
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleUploadAvatar}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            <button
-              type="button"
-              disabled={loading}
-              onClick={handleFinalSignup}
-              className="mt-14 w-36 rounded-lg bg-[#3498eb] px-6 py-3 text-sm font-medium text-white shadow-lg shadow-[#3498eb]/20 transition hover:bg-[#2587d8] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {loading ? "صبر..." : "تایید"}
-            </button>
-          </div>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
+  // ---------- مرحله‌ی انتخاب آواتار ----------
+  if (step === "avatar") {
+    return (
+      <AuthShell
+        activeTab="register"
+        image={for_login}
+        imageAlt="ثبت‌نام در مووی‌ورس"
+        title="یک آواتار انتخاب کن"
+        subtitle="این تصویر کنار اسمت نمایش داده می‌شود. آواتار اختیاری است و بعداً هم می‌توانی عوضش کنی."
+      >
+        <form onSubmit={finalSignup} className="space-y-5">
+          <GeneralError message={generalError} />
+
+          <div className="flex items-center gap-4">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10 ring-2 ring-rose-400/40">
+              {selectedAvatar
+                ? <img src={selectedAvatar.value} alt="آواتار انتخابی" className="h-full w-full object-cover" />
+                : <User className="h-9 w-9 text-white/60" />}
+            </div>
+            <div className="text-sm leading-6 text-white/65">
+              <p className="font-semibold text-white">{form.username}</p>
+              <p>{selectedAvatar ? "آواتار انتخاب شد؛ اگر خواستی از گالری زیر عوضش کن." : "از گالری زیر انتخاب کن یا عکس خودت را آپلود کن."}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {avatarList.map((src, i) => {
+              const active = selectedAvatar?.type === "url" && selectedAvatar.value === src;
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setSelectedAvatar({ type: "url", value: src })}
+                  aria-pressed={active}
+                  className={`overflow-hidden rounded-2xl ring-2 transition hover:scale-[1.03] ${active ? "ring-rose-400" : "ring-white/10 hover:ring-white/30"}`}
+                >
+                  <img src={src} alt={`آواتار ${i + 1}`} className="aspect-square w-full object-cover" loading="lazy" />
+                </button>
+              );
+            })}
+          </div>
+
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-white/20 bg-white/[0.03] px-4 py-3.5 text-sm text-white/75 transition hover:border-rose-400/40 hover:text-white">
+            <ImagePlus className="h-4 w-4" />
+            آپلود عکس از دستگاه
+            <input type="file" accept="image/*" className="hidden" onChange={handleUploadAvatar} />
+          </label>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setStep("auth")}
+              className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3.5 text-sm font-medium text-white/80 transition hover:bg-white/10"
+            >
+              بازگشت
+            </button>
+            <button
+              type="submit"
+              disabled={submitting}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-2xl ${BRAND} px-5 py-3.5 text-sm font-bold text-white shadow-[0_16px_40px_rgba(225,29,72,0.3)] transition hover:opacity-90 disabled:cursor-wait disabled:opacity-60`}
+            >
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+              {submitting ? "در حال ساخت حساب..." : "ساخت حساب کاربری"}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setSelectedAvatar(null); finalSignup(); }}
+            disabled={submitting}
+            className="mx-auto flex items-center gap-1.5 text-xs text-white/50 transition hover:text-white disabled:opacity-50"
+          >
+            <SkipForward className="h-3.5 w-3.5" />
+            بدون آواتار ثبت‌نام کن
+          </button>
+        </form>
+      </AuthShell>
+    );
+  }
+
+  // ---------- مرحله‌ی اطلاعات حساب ----------
   return (
-    <div className="min-h-screen bg-[#020b2b] text-white">
-      <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_bottom_left,rgba(83,48,170,0.45),transparent_28%),linear-gradient(90deg,#030b2f_0%,#020726_45%,#020726_100%)]">
+    <AuthShell
+      activeTab="register"
+      image={for_login}
+      imageAlt="ثبت‌نام در مووی‌ورس"
+      title="ساخت حساب جدید"
+      subtitle="رایگان ثبت‌نام کن؛ لیست تماشا بساز، فیلم‌ها را ذخیره کن و به دانلودهای VIP دسترسی داشته باش."
+    >
+      <form onSubmit={goAvatarStep} noValidate className="space-y-4">
+        <GeneralError message={generalError} />
+
+        <TextField
+          icon={User}
+          type="text"
+          name="username"
+          value={form.username}
+          onChange={change}
+          placeholder="نام کاربری (انگلیسی)"
+          autoComplete="username"
+          autoFocus
+          error={fieldErrors.username}
+        />
+
+        <TextField
+          icon={Mail}
+          type="email"
+          name="email"
+          value={form.email}
+          onChange={change}
+          placeholder="ایمیل"
+          autoComplete="email"
+          dir="ltr"
+          error={fieldErrors.email}
+        />
+
+        <div>
+          <PasswordField
+            value={form.password}
+            onChange={change}
+            placeholder="رمز عبور (حداقل ۸ نویسه)"
+            autoComplete="new-password"
+            error={fieldErrors.password}
+            show={showPassword}
+            onToggleShow={() => setShowPassword((p) => !p)}
+          />
+          {form.password && (
+            <div className="mt-2.5 flex items-center gap-3">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                <div className={`h-full rounded-full transition-all duration-300 ${strength.color}`} style={{ width: strength.width }} />
+              </div>
+              <span className="text-[11px] text-white/55">قدرت رمز: {strength.label}</span>
+            </div>
+          )}
+        </div>
+
+        <PasswordField
+          name="confirmPassword"
+          value={form.confirmPassword}
+          onChange={change}
+          placeholder="تکرار رمز عبور"
+          autoComplete="new-password"
+          error={fieldErrors.confirmPassword}
+          show={showConfirm}
+          onToggleShow={() => setShowConfirm((p) => !p)}
+        />
+        {form.confirmPassword && form.password !== form.confirmPassword && !fieldErrors.confirmPassword && (
+          <p className="-mt-2 text-xs text-amber-300">رمز عبور و تکرار آن هنوز یکی نیستند.</p>
+        )}
+
         <button
-          type="button"
-          onClick={() => window.history.back()}
-          className="absolute left-5 top-5 z-20 text-white/80 transition hover:text-white"
+          type="submit"
+          className={`flex w-full items-center justify-center gap-2 rounded-2xl ${BRAND} px-5 py-3.5 text-sm font-bold text-white shadow-[0_16px_40px_rgba(225,29,72,0.3)] transition hover:opacity-90 active:scale-[0.99]`}
         >
-          <ArrowLeft size={20} />
+          ادامه و انتخاب آواتار
+          <ChevronRight className="h-4 w-4 rotate-180" />
         </button>
 
-        <div className="mx-auto flex min-h-screen flex-col items-center gap-28 px-6 py-10 lg:flex-row lg:items-center lg:justify-center lg:px-10">
-          {/* Left Side */}
-          <div className="z-10 w-full max-w-sm lg:max-w-md">
-            <h1 className="mb-8 text-5xl font-semibold tracking-tight text-white lg:text-6xl">
-              مووی<span className="text-[#2f8fe8]">ورس</span>
-            </h1>
-            <br />
-            <div className="mb-14 flex items-center gap-10 text-xl font-semibold uppercase">
-              <button
-                type="button"
-                onClick={() => navigate("/login")}
-                className="relative pb-2 text-white/75 transition hover:text-white"
-              >
-                ورود
-              </button>
-
-              <button
-                type="button"
-                className="relative pb-2 text-white"
-              >
-                ثبت نام
-                <span className="absolute bottom-0 left-0 h-[3px] w-full rounded-full bg-[#2f8fe8]" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSignupNext} className="space-y-5">
-              <div className="relative">
-                <input
-                  type="text"
-                  name="username"
-                  value={signupData.username}
-                  onChange={handleSignupChange}
-                  placeholder="نام کاربری"
-                  className="w-full rounded-2xl border border-white/50 bg-transparent px-5 py-4 text-white placeholder:text-white/45 outline-none transition focus:border-[#4aa3ff] focus:ring-2 focus:ring-[#4aa3ff]/20"
-                />
-              </div>
-
-              <div className="relative">
-                <input
-                  type="email"
-                  name="email"
-                  value={signupData.email}
-                  onChange={handleSignupChange}
-                  placeholder="ایمیل"
-                  className="w-full rounded-2xl border border-white/50 bg-transparent px-5 py-4 text-white placeholder:text-white/45 outline-none transition focus:border-[#4aa3ff] focus:ring-2 focus:ring-[#4aa3ff]/20"
-                />
-              </div>
-
-              <div className="relative">
-                <input
-                  type="password"
-                  name="password"
-                  value={signupData.password}
-                  onChange={handleSignupChange}
-                  placeholder="رمز عبور"
-                  className="w-full rounded-2xl border border-white/50 bg-transparent px-5 py-4 text-white placeholder:text-white/45 outline-none transition focus:border-[#4aa3ff] focus:ring-2 focus:ring-[#4aa3ff]/20"
-                />
-              </div>
-
-              <div className="relative">
-                <input
-                  type="password"
-                  name="confirmPassword"
-                  value={signupData.confirmPassword}
-                  onChange={handleSignupChange}
-                  placeholder="تکرار رمز عبور"
-                  className="w-full rounded-2xl border border-white/50 bg-transparent px-5 py-4 text-white placeholder:text-white/45 outline-none transition focus:border-[#4aa3ff] focus:ring-2 focus:ring-[#4aa3ff]/20"
-                />
-              </div>
-
-              <div className="pt-4">
-                <button
-                  type="submit"
-                  className="mx-auto block w-full max-w-[170px] rounded-xl bg-[#3498eb] px-6 py-3 text-sm font-medium uppercase tracking-wide text-white shadow-lg shadow-[#3498eb]/20 transition hover:bg-[#2587d8] focus:outline-none focus:ring-2 focus:ring-[#57aaf0]"
-                >
-                  تایید
-                </button>
-              </div>
-            </form>
-          </div>
-
-          {/* Right Side Image */}
-          <div className="">
-            <div className="overflow-hidden rounded-[28px] bg-[#06113a] shadow-2xl">
-              <img
-                src={for_login}
-                alt="Fantasy visual"
-                className="h-[300px] w-full max-w-[1300px] object-cover md:h-[500px] lg:h-[500px] xl:h-[800px] mx-auto"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+        <p className="flex items-center justify-center gap-1.5 pt-1 text-center text-[11px] text-white/40">
+          <Lock className="h-3.5 w-3.5" />
+          رمز عبور شما به‌صورت رمزنگاری‌شده نگهداری می‌شود.
+        </p>
+      </form>
+    </AuthShell>
   );
 }
 
