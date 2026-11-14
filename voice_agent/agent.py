@@ -1,10 +1,15 @@
 """ایجنت صوتی دستیار سینمایی مووی‌ورس (LiveKit Agents، پایپ‌لاین آبشاری).
 
 جریان مکالمه:
-    میکروفون کاربر → LiveKit → Azure STT (fa-IR)
-    → LLM (از طریق OpenRouter، قابل تنظیم با env)
+    میکروفون کاربر → LiveKit → STT ابری (Whisper روی Groq)
+    → LLM (OpenAI-compatible؛ پیش‌فرض OpenRouter)
     → ابزارهای کاتالوگ جنگو (فقط از /ai/assistant/tool/ با سکرت داخلی)
-    → Azure TTS (fa-IR) → بلندگوی کاربر
+    → TTS ابری (Orpheus روی Groq) → بلندگوی کاربر
+
+پشته‌ی گفتار ابری و کاملاً رایگان است (پلن Free سرویس Groq، بدون کارت):
+شنیدن با whisper-large-v3 و صحبت‌کردن با Orpheus انگلیسی. گزینه‌ی
+جایگزین با SPEECH_PROVIDER=local: سرور خودمیزبان Speaches و Piper
+فارسی (docker-compose.speech.yml). جزئیات: voice_agent/README.md.
 
 حالت‌های آواتار (listening/thinking/speaking/idle) و کارت‌های پیشنهاد
 از روی دیتاچنل LiveKit برای فرانت ارسال می‌شوند تا آواتار سه‌بعدی و
@@ -22,7 +27,7 @@ import os
 import httpx
 from livekit import agents
 from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, function_tool
-from livekit.plugins import azure, openai, silero
+from livekit.plugins import openai, silero
 
 logger = logging.getLogger("jmovie-voice-agent")
 
@@ -31,13 +36,64 @@ logger = logging.getLogger("jmovie-voice-agent")
 # ---------------------------------------------------------------------------
 DJANGO_API_BASE = os.getenv("JMOVIE_API_BASE", "http://localhost:8000").rstrip("/")
 INTERNAL_SECRET = os.getenv("ASSISTANT_INTERNAL_SECRET", "")
-AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY", "")
-AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION", "")
-AZURE_TTS_VOICE = os.getenv("AZURE_TTS_VOICE", "fa-IR-DilaraNeural")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 
-SYSTEM_PROMPT = """تو دستیار سینمایی مجازی سایت «مووی‌ورس» هستی؛ یک مشاور سینمایی صمیمی، حرفه‌ای و خوش‌صحبت که فارسی محاوره‌ای و طبیعی حرف می‌زند.
+# ---------------------------------------------------------------------------
+# پشته‌ی گفتار (STT/TTS) — ابریِ رایگان (Groq) یا لوکال (Speaches)
+# هر دو پشت API سازگار با OpenAI هستند؛ فقط preset عوض می‌شود.
+#   groq  (پیش‌فرض): پلن Free ‏Groq بدون کارت — Whisper برای شنیدن و
+#          Orpheus انگلیسی برای صحبت‌کردن. کلید: GROQ_API_KEY
+#   local: سرور Speaches روی سرور خودتان با Piper فارسی (بدون کلید).
+# هر مقدار را می‌توان جداگانه با env بازنویسی کرد (STT_MODEL و ...).
+# ---------------------------------------------------------------------------
+SPEECH_PROVIDER = os.getenv("SPEECH_PROVIDER", "groq").strip().lower()
+
+_SPEECH_PRESETS = {
+    "groq": {
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "stt_model": "whisper-large-v3-turbo",
+        "tts_model": "canopylabs/orpheus-v1-english",
+        "tts_voice": "autumn",
+        "tts_response_format": "wav",
+        # Orpheus فقط انگلیسی صحبت می‌کند؛ مکالمه هم انگلیسی می‌شود.
+        # (Whisper فارسی را هم می‌فهمد، ولی صدای خروجی انگلیسی است.)
+        "language": "en",
+    },
+    "local": {
+        "base_url": "http://localhost:8001/v1",
+        "api_key_env": "",
+        "stt_model": "Systran/faster-whisper-large-v3",
+        "tts_model": "speaches-ai/piper-fa_IR-amir-medium",
+        "tts_voice": "amir",
+        "tts_response_format": "mp3",
+        "language": "fa",
+    },
+}
+_SPEECH = _SPEECH_PRESETS.get(SPEECH_PROVIDER, _SPEECH_PRESETS["groq"])
+
+SPEECH_BASE_URL = os.getenv("SPEECH_BASE_URL", _SPEECH["base_url"]).rstrip("/")
+# برای سرور لوکال کلید واقعی لازم نیست؛ مقدار صوری فقط چون کلاینت
+# OpenAI مقدار خالی قبول نمی‌کند و سرور لوکال آن را بررسی نمی‌کند.
+SPEECH_API_KEY = (
+    os.getenv("SPEECH_API_KEY", "")
+    or (os.getenv(_SPEECH["api_key_env"], "") if _SPEECH["api_key_env"] else "")
+    or "speaches"
+)
+STT_MODEL = os.getenv("STT_MODEL", _SPEECH["stt_model"])
+TTS_MODEL = os.getenv("TTS_MODEL", _SPEECH["tts_model"])
+TTS_VOICE = os.getenv("TTS_VOICE", _SPEECH["tts_voice"])
+TTS_RESPONSE_FORMAT = os.getenv("TTS_RESPONSE_FORMAT", _SPEECH["tts_response_format"])
+# زبان مکالمه (شخصیت دستیار + زبان تشخیص گفتار)
+ASSISTANT_LANGUAGE = os.getenv("ASSISTANT_LANGUAGE", _SPEECH["language"]).strip().lower()
+STT_LANGUAGE = os.getenv("STT_LANGUAGE", ASSISTANT_LANGUAGE)
+
+# LLM از هر endpoint سازگار با OpenAI؛ پیش‌فرض OpenRouter (همان کلید چت
+# متنی سایت). برای اجرای کاملاً لوکال: LLM_BASE_URL=http://localhost:11434/v1
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "") or os.getenv("OPENROUTER_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "") or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+
+SYSTEM_PROMPT_FA = """تو دستیار سینمایی مجازی سایت «مووی‌ورس» هستی؛ یک مشاور سینمایی صمیمی، حرفه‌ای و خوش‌صحبت که فارسی محاوره‌ای و طبیعی حرف می‌زند.
 
 شخصیت و قواعد:
 - پاسخ‌ها کوتاه، گرم و مناسب شنیدن با صدا باشند (معمولاً ۲ تا ۴ جمله). از فهرست‌های طولانی و خواندن همه‌ی جزئیات خودداری کن؛ فقط مهم‌ترین‌ها را بگو.
@@ -50,13 +106,31 @@ SYSTEM_PROMPT = """تو دستیار سینمایی مجازی سایت «موو
 - نام فیلم‌ها را همان‌طور که ابزار برمی‌گرداند بگو.
 """
 
+# نسخه‌ی انگلیسی شخصیت — وقتی صدای خروجی انگلیسی است (مثل Orpheus ابری)
+# مکالمه هم انگلیسی می‌شود تا TTS متن را درست بخواند.
+SYSTEM_PROMPT_EN = """You are the virtual cinema assistant of the "MovieVerse" website: a friendly, professional movie consultant who speaks natural, conversational English.
+
+Personality and rules:
+- Keep spoken replies short, warm and easy to listen to (usually 2-4 sentences). Do not read long lists or every detail aloud; mention only the most important points.
+- Never invent ratings, cast members, release years or any movie/series facts. For any real information about a title, always use the tools.
+- Only say a title "is on MovieVerse" when a tool returned it. If a title is not in the catalog, say so honestly and suggest a similar alternative.
+- No spoilers unless the user explicitly asks; warn before spoiling.
+- If the user's taste is unclear, ask one or two short follow-up questions (genre? movie or series? tonight's mood? time limit?) and then recommend precisely.
+- Use recommend_titles for recommendations, get_title_details for a specific title, search_similar_titles for "like X", and compare_titles for comparisons.
+- When recommending several titles, introduce at most 3 aloud with a short reason tailored to the user's taste; the rest appear as cards on the site.
+- Say title names exactly as the tools return them.
+"""
+
+SYSTEM_PROMPT = SYSTEM_PROMPT_EN if ASSISTANT_LANGUAGE.startswith("en") else SYSTEM_PROMPT_FA
+
 
 def require_config():
     missing = []
-    if not AZURE_SPEECH_KEY or not AZURE_SPEECH_REGION:
-        missing.append("AZURE_SPEECH_KEY / AZURE_SPEECH_REGION (Azure Speech free tier F0)")
-    if not OPENROUTER_API_KEY:
-        missing.append("OPENROUTER_API_KEY (برای LLM؛ مدل با OPENROUTER_MODEL)")
+    if SPEECH_PROVIDER == "groq" and not os.getenv("GROQ_API_KEY"):
+        missing.append("GROQ_API_KEY (پلن رایگان Groq از console.groq.com؛ یا SPEECH_PROVIDER=local)")
+    using_openrouter = "openrouter.ai" in LLM_BASE_URL
+    if using_openrouter and not LLM_API_KEY:
+        missing.append("OPENROUTER_API_KEY (برای LLM؛ یا LLM_BASE_URL را روی یک سرور لوکال بگذار)")
     if not INTERNAL_SECRET:
         missing.append("ASSISTANT_INTERNAL_SECRET (سکرت مشترک با جنگو)")
     if not os.getenv("LIVEKIT_URL") or not os.getenv("LIVEKIT_API_KEY") or not os.getenv("LIVEKIT_API_SECRET"):
@@ -66,6 +140,44 @@ def require_config():
             "پیکربندی ایجنت صوتی کامل نیست. متغیرهای زیر را در env ست کن:\n- "
             + "\n- ".join(missing)
             + "\nراهنما: docs/assistant/SETUP.md"
+        )
+
+
+def build_stt():
+    """شنیدن: Whisper ابری Groq (پیش‌فرض) یا Whisper لوکال Speaches."""
+    return openai.STT(
+        model=STT_MODEL,
+        language=STT_LANGUAGE,
+        base_url=SPEECH_BASE_URL,
+        api_key=SPEECH_API_KEY,
+    )
+
+
+def build_tts():
+    """صحبت‌کردن: Orpheus ابری Groq (پیش‌فرض) یا Piper فارسی لوکال."""
+    return openai.TTS(
+        model=TTS_MODEL,
+        voice=TTS_VOICE,
+        base_url=SPEECH_BASE_URL,
+        api_key=SPEECH_API_KEY,
+        response_format=TTS_RESPONSE_FORMAT,
+    )
+
+
+async def warn_if_speech_server_down():
+    """فقط برای حالت لوکال: نبود سرور گفتار را هشدار می‌دهیم، ایجنت نمی‌خوابد."""
+    if SPEECH_PROVIDER != "local":
+        return
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            response = await client.get(f"{SPEECH_BASE_URL}/models")
+            response.raise_for_status()
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "سرور گفتار لوکال در %s پاسخ نداد؛ مکالمه‌ی صوتی کار نمی‌کند. "
+            "راه‌اندازی: docker compose -f docker-compose.speech.yml up -d "
+            "(جزئیات در voice_agent/README.md)",
+            SPEECH_BASE_URL,
         )
 
 
@@ -231,26 +343,18 @@ class MovieVerseAssistant(Agent):
 
 async def entrypoint(ctx: JobContext):
     require_config()
+    await warn_if_speech_server_down()
     catalog = CatalogClient()
     assistant = MovieVerseAssistant(ctx.room, catalog)
 
     session = AgentSession(
-        stt=azure.STT(
-            speech_key=AZURE_SPEECH_KEY,
-            speech_region=AZURE_SPEECH_REGION,
-            language="fa-IR",
-        ),
+        stt=build_stt(),
         llm=openai.LLM(
-            model=OPENROUTER_MODEL,
-            api_key=OPENROUTER_API_KEY,
-            base_url="https://openrouter.ai/api/v1",
+            model=LLM_MODEL,
+            api_key=LLM_API_KEY or "local",
+            base_url=LLM_BASE_URL,
         ),
-        tts=azure.TTS(
-            speech_key=AZURE_SPEECH_KEY,
-            speech_region=AZURE_SPEECH_REGION,
-            language="fa-IR",
-            voice=AZURE_TTS_VOICE,
-        ),
+        tts=build_tts(),
         vad=silero.VAD.load(),
     )
 
@@ -272,12 +376,18 @@ async def entrypoint(ctx: JobContext):
     )
 
     # سلام آغازین کوتاه (با همان شخصیت و بدون ساختن اطلاعات سینمایی)
-    session.generate_reply(
-        instructions=(
+    if ASSISTANT_LANGUAGE.startswith("en"):
+        greeting_instructions = (
+            "Greet the user briefly in friendly English, introduce yourself as the "
+            "MovieVerse cinema assistant, and ask what movie or series they feel "
+            "like watching tonight. At most two sentences."
+        )
+    else:
+        greeting_instructions = (
             "به فارسی محاوره‌ای و کوتاه سلام کن، خودت را دستیار سینمایی مووی‌ورس معرفی کن "
             "و بپرس امشب چه فیلمی یا سریالی دوست دارد ببیند. حداکثر دو جمله."
         )
-    )
+    session.generate_reply(instructions=greeting_instructions)
 
 
 if __name__ == "__main__":
