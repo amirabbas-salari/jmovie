@@ -1,0 +1,34 @@
+# سرور گفتار لوکال و کاملاً رایگان دستیار (Speaches) — بدون حساب ابری
+#
+# یک کانتینر، هر دو جهت گفتار را پشت API سازگار با OpenAI می‌دهد:
+#   STT: faster-whisper (چندزبانه، فارسی هم دارد)
+#   TTS: Piper (صدای فارسی fa_IR) یا Kokoro (انگلیسی)
+#
+# اجرا:
+#   docker compose -f docker-compose.speech.yml up -d
+# دانلود مدل‌ها (فقط بار اول؛ روی دیسک می‌مانند):
+#   curl -X POST http://localhost:8001/v1/models/Systran/faster-whisper-large-v3
+#   curl -X POST http://localhost:8001/v1/models/speaches-ai/piper-fa_IR-amir-medium
+#   (یا با ابزار خود پروژه: uvx speaches-cli model download <model_id>)
+# فهرست مدل‌های نصب‌شده:  curl http://localhost:8001/v1/models
+#
+# پورت 8001 انتخاب شده تا با جنگو (8000) تداخل نکند. برای GPU، ایمیج را به
+# latest-cuda عوض کنید و بخش GPU کامنت‌شده را فعال کنید.
+services:
+  speaches:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: jmovie-speaches
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      # کش مدل‌ها بیرون کانتینر می‌ماند تا با هر ری‌استارت دوباره دانلود نشوند
+      - speaches-hf-cache:/home/ubuntu/.cache/huggingface/hub
+    # deploy:            # ← برای GPU این بخش را از کامنت درآورید
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - capabilities: [gpu]
+
+volumes:
+  speaches-hf-cache:

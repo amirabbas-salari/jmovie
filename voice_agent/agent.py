@@ -1,10 +1,15 @@
 """ایجنت صوتی دستیار سینمایی مووی‌ورس (LiveKit Agents، پایپ‌لاین آبشاری).
 
 جریان مکالمه:
-    میکروفون کاربر → LiveKit → Azure STT (fa-IR)
-    → LLM (از طریق OpenRouter، قابل تنظیم با env)
+    میکروفون کاربر → LiveKit → STT (Whisper روی سرور لوکال Speaches)
+    → LLM (OpenAI-compatible؛ پیش‌فرض OpenRouter، قابل جابه‌جایی با لوکال)
     → ابزارهای کاتالوگ جنگو (فقط از /ai/assistant/tool/ با سکرت داخلی)
-    → Azure TTS (fa-IR) → بلندگوی کاربر
+    → TTS (Piper فارسی روی همان سرور Speaches) → بلندگوی کاربر
+
+پشته‌ی گفتار کاملاً رایگان و خودمیزبان است (Speaches: faster-whisper
+برای شنیدن + Piper/Kokoro برای صحبت‌کردن، پشت API سازگار با OpenAI)؛
+هیچ حساب ابری یا کلید پولی برای صدا لازم نیست. راه‌اندازی سرور گفتار:
+voice_agent/README.md و فایل docker-compose.speech.yml.
 
 حالت‌های آواتار (listening/thinking/speaking/idle) و کارت‌های پیشنهاد
 از روی دیتاچنل LiveKit برای فرانت ارسال می‌شوند تا آواتار سه‌بعدی و
@@ -22,7 +27,7 @@ import os
 import httpx
 from livekit import agents
 from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, function_tool
-from livekit.plugins import azure, openai, silero
+from livekit.plugins import openai, silero
 
 logger = logging.getLogger("jmovie-voice-agent")
 
@@ -31,11 +36,21 @@ logger = logging.getLogger("jmovie-voice-agent")
 # ---------------------------------------------------------------------------
 DJANGO_API_BASE = os.getenv("JMOVIE_API_BASE", "http://localhost:8000").rstrip("/")
 INTERNAL_SECRET = os.getenv("ASSISTANT_INTERNAL_SECRET", "")
-AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY", "")
-AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION", "")
-AZURE_TTS_VOICE = os.getenv("AZURE_TTS_VOICE", "fa-IR-DilaraNeural")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+
+# سرور گفتار لوکال (Speaches) — بدون کلید واقعی؛ api_key فقط چون کلاینت
+# OpenAI مقدار خالی قبول نمی‌کند و سرور لوکال آن را بررسی نمی‌کند.
+SPEECH_BASE_URL = os.getenv("SPEECH_BASE_URL", "http://localhost:8001/v1").rstrip("/")
+SPEECH_API_KEY = os.getenv("SPEECH_API_KEY", "speaches")
+STT_MODEL = os.getenv("STT_MODEL", "Systran/faster-whisper-large-v3")
+STT_LANGUAGE = os.getenv("STT_LANGUAGE", "fa")
+TTS_MODEL = os.getenv("TTS_MODEL", "speaches-ai/piper-fa_IR-amir-medium")
+TTS_VOICE = os.getenv("TTS_VOICE", "amir")
+
+# LLM از هر endpoint سازگار با OpenAI؛ پیش‌فرض OpenRouter (همان کلید چت
+# متنی سایت). برای اجرای کاملاً لوکال: LLM_BASE_URL=http://localhost:11434/v1
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1").rstrip("/")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "") or os.getenv("OPENROUTER_API_KEY", "")
+LLM_MODEL = os.getenv("LLM_MODEL", "") or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
 
 SYSTEM_PROMPT = """تو دستیار سینمایی مجازی سایت «مووی‌ورس» هستی؛ یک مشاور سینمایی صمیمی، حرفه‌ای و خوش‌صحبت که فارسی محاوره‌ای و طبیعی حرف می‌زند.
 
@@ -53,10 +68,9 @@ SYSTEM_PROMPT = """تو دستیار سینمایی مجازی سایت «موو
 
 def require_config():
     missing = []
-    if not AZURE_SPEECH_KEY or not AZURE_SPEECH_REGION:
-        missing.append("AZURE_SPEECH_KEY / AZURE_SPEECH_REGION (Azure Speech free tier F0)")
-    if not OPENROUTER_API_KEY:
-        missing.append("OPENROUTER_API_KEY (برای LLM؛ مدل با OPENROUTER_MODEL)")
+    using_openrouter = "openrouter.ai" in LLM_BASE_URL
+    if using_openrouter and not LLM_API_KEY:
+        missing.append("OPENROUTER_API_KEY (برای LLM؛ یا LLM_BASE_URL را روی یک سرور لوکال بگذار)")
     if not INTERNAL_SECRET:
         missing.append("ASSISTANT_INTERNAL_SECRET (سکرت مشترک با جنگو)")
     if not os.getenv("LIVEKIT_URL") or not os.getenv("LIVEKIT_API_KEY") or not os.getenv("LIVEKIT_API_SECRET"):
@@ -66,6 +80,41 @@ def require_config():
             "پیکربندی ایجنت صوتی کامل نیست. متغیرهای زیر را در env ست کن:\n- "
             + "\n- ".join(missing)
             + "\nراهنما: docs/assistant/SETUP.md"
+        )
+
+
+def build_stt():
+    """شنیدن: Whisper روی سرور گفتار لوکال (فارسی را هم پشتیبانی می‌کند)."""
+    return openai.STT(
+        model=STT_MODEL,
+        language=STT_LANGUAGE,
+        base_url=SPEECH_BASE_URL,
+        api_key=SPEECH_API_KEY,
+    )
+
+
+def build_tts():
+    """صحبت‌کردن: Piper فارسی (پیش‌فرض) یا هر مدل TTS همان سرور لوکال."""
+    return openai.TTS(
+        model=TTS_MODEL,
+        voice=TTS_VOICE,
+        base_url=SPEECH_BASE_URL,
+        api_key=SPEECH_API_KEY,
+    )
+
+
+async def warn_if_speech_server_down():
+    """سرور گفتار لوکال را فقط هشدار می‌دهیم؛ نبودنش نباید کل ایجنت را بخواباند."""
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as client:
+            response = await client.get(f"{SPEECH_BASE_URL}/models")
+            response.raise_for_status()
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "سرور گفتار لوکال در %s پاسخ نداد؛ مکالمه‌ی صوتی کار نمی‌کند. "
+            "راه‌اندازی: docker compose -f docker-compose.speech.yml up -d "
+            "(جزئیات در voice_agent/README.md)",
+            SPEECH_BASE_URL,
         )
 
 
@@ -231,26 +280,18 @@ class MovieVerseAssistant(Agent):
 
 async def entrypoint(ctx: JobContext):
     require_config()
+    await warn_if_speech_server_down()
     catalog = CatalogClient()
     assistant = MovieVerseAssistant(ctx.room, catalog)
 
     session = AgentSession(
-        stt=azure.STT(
-            speech_key=AZURE_SPEECH_KEY,
-            speech_region=AZURE_SPEECH_REGION,
-            language="fa-IR",
-        ),
+        stt=build_stt(),
         llm=openai.LLM(
-            model=OPENROUTER_MODEL,
-            api_key=OPENROUTER_API_KEY,
-            base_url="https://openrouter.ai/api/v1",
+            model=LLM_MODEL,
+            api_key=LLM_API_KEY or "local",
+            base_url=LLM_BASE_URL,
         ),
-        tts=azure.TTS(
-            speech_key=AZURE_SPEECH_KEY,
-            speech_region=AZURE_SPEECH_REGION,
-            language="fa-IR",
-            voice=AZURE_TTS_VOICE,
-        ),
+        tts=build_tts(),
         vad=silero.VAD.load(),
     )
 
