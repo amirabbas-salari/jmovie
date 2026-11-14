@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import Home from '../pages/Home'
 
 import ScrollToTop from '../components/ui/ScrollToTop'
@@ -21,8 +21,23 @@ const CollectionDetail = lazy(() => import('../pages/collections/CollectionDetai
 const GenreDetailsPage = lazy(() => import('../pages/GenreDetailsPage'))
 const SupportPage = lazy(() => import('../pages/SupportPage'))
 const PrizePage = lazy(() => import('../pages/PrizePage'))
+// دستیار سینمایی مجازی (صدا + آواتار سه‌بعدی) سنگین است؛ lazy می‌ماند تا
+// باندل اولیه‌ی سایت (three/livekit) را سنگین نکند.
+const VirtualAssistant = lazy(() => import('../components/assistant/VirtualAssistant'))
 const ActorDetailPage = lazy(() => import('../pages/ActorDetailPage'))
 const MyListsPage = lazy(() => import('../pages/MyListsPage'))
+
+
+// ویجت شناور دستیار روی صفحات عمومی سایت است، نه پنل ادمین
+function AssistantWidget() {
+  const { pathname } = useLocation()
+  if (pathname.startsWith('/admin')) return null
+  return (
+    <Suspense fallback={null}>
+      <VirtualAssistant />
+    </Suspense>
+  )
+}
 
 const PageFallback = () => (
   <div className="flex min-h-[50vh] items-center justify-center gap-3 text-sm text-zinc-400">
@@ -139,6 +154,7 @@ function AppRoutes() {
       </Route>
     </Routes>
     </Suspense>
+    <AssistantWidget />
     </>
   )
 }
