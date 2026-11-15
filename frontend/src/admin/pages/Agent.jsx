@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import {
-  Bot, Check, Film, History, Play, Settings2, Sparkles, Tv, X,
+  Bot, Check, Download, Film, History, Play, Settings2, Sparkles, Tv, X,
 } from "lucide-react"
 import { agentApi, getApiError } from "../services/adminApi"
 import { useAdmin } from "../context/AdminContext"
@@ -28,12 +28,13 @@ export default function Agent() {
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
+  const [fetchingId, setFetchingId] = useState(null)
   const [savingSettings, setSavingSettings] = useState(false)
   const [error, setError] = useState("")
   const [notice, setNotice] = useState("")
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
     try {
       const [s, d, r] = await Promise.all([
         agentApi.getSettings(),
@@ -45,15 +46,38 @@ export default function Agent() {
       setCounts(d.counts || { pending: 0, approved: 0, rejected: 0 })
       setRuns(Array.isArray(r) ? r : [])
       setSelected(new Set())
-      setError("")
+      if (!quiet) setError("")
     } catch (err) {
-      setError(getApiError(err))
+      if (!quiet) setError(getApiError(err))
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [tab])
 
   useEffect(() => { load() }, [load])
+
+  // وقتی اجرایی در پس‌زمینه در جریان است، هر چند ثانیه وضعیت تازه می‌شود
+  const anyRunning = runs.some((r) => r.status === "running")
+  const wasRunning = useRef(false)
+  useEffect(() => {
+    if (anyRunning) {
+      wasRunning.current = true
+      const timer = setInterval(() => load(true), 5000)
+      return () => clearInterval(timer)
+    }
+    if (wasRunning.current) {
+      wasRunning.current = false
+      const last = runs[0]
+      if (last && last.status === "success") {
+        setNotice(
+          `اجرا تمام شد: ${formatNumber(last.created_movies)} فیلم و ${formatNumber(last.created_series)} سریال جدید به پیش‌نویس‌ها اضافه شد (${formatNumber(last.existing_skipped + last.blacklisted_skipped)} تکراری رد شد، ${formatNumber(last.failed_count)} خطا).`
+        )
+      } else if (last && last.status === "failed") {
+        setError("اجرای ایجنت ناموفق بود؛ جزئیات در تاریخچه‌ی اجراها.")
+      }
+    }
+    return undefined
+  }, [anyRunning, runs, load])
 
   const toggleSource = (value) => {
     setSettings((prev) => {
@@ -84,16 +108,37 @@ export default function Agent() {
   const runAgent = async () => {
     setRunning(true)
     setNotice("")
+    setError("")
     try {
-      const run = await agentApi.run({})
-      setNotice(
-        `اجرا تمام شد: ${formatNumber(run.created_movies)} فیلم و ${formatNumber(run.created_series)} سریال جدید به پیش‌نویس‌ها اضافه شد (${formatNumber(run.existing_skipped)} تکراری رد شد).`
-      )
-      await load()
+      await agentApi.run({})
+      setNotice("اجرا در پس‌زمینه شروع شد؛ پیش‌نویس‌ها و شمارنده‌ها همین‌جا زنده به‌روز می‌شوند.")
+      await load(true)
     } catch (err) {
       setError(getApiError(err))
     } finally {
       setRunning(false)
+    }
+  }
+
+  const fetchDownloads = async (item) => {
+    setFetchingId(item.id)
+    setNotice("")
+    setError("")
+    try {
+      const res = await agentApi.fetchDownloads(item.id)
+      const s = res.summary || {}
+      if (s.error) {
+        setError(s.error)
+      } else if (!s.found) {
+        setNotice(`برای «${item.title}» در سایت دوم لینک دانلودی پیدا نشد. آدرس سایت و عنوان اثر را بررسی کنید.`)
+      } else {
+        setNotice(`«${item.title}»: ${formatNumber(s.found)} لینک دانلود پیدا شد و ${formatNumber(s.created)} لینک جدید وصل شد.`)
+      }
+      await load(true)
+    } catch (err) {
+      setError(getApiError(err))
+    } finally {
+      setFetchingId(null)
     }
   }
 
@@ -147,19 +192,21 @@ export default function Agent() {
           </h2>
           <p className="mb-4 text-xs leading-6 text-zinc-400">
             ایجنت از TMDB آثار جدید و محبوبی را که در سایت ندارید پیدا می‌کند،
-            اطلاعات کامل و پوسترشان را می‌آورد و به‌صورت پیش‌نویس (مخفی) ذخیره
-            می‌کند. اجرای زمان‌بندی روزانه هم با دستور
+            اطلاعات کامل، پوستر، بازیگران و برای سریال‌ها فصل و قسمت‌ها را
+            می‌آورد؛ لینک‌های دانلود را هم از سایت دوم شما (در تنظیمات) برمی‌دارد
+            و همه را به‌صورت پیش‌نویس (مخفی) ذخیره می‌کند. اجرا در پس‌زمینه
+            انجام می‌شود و وضعیتش زنده همین‌جا دیده می‌شود. اجرای زمان‌بندی روزانه هم با دستور
             <code dir="ltr" className="mx-1 rounded bg-black/40 px-1.5 py-0.5 text-[11px] text-rose-300">python manage.py run_content_agent</code>
             روی سرور فعال می‌شود.
           </p>
           <button
             type="button"
             onClick={runAgent}
-            disabled={running || !canRun}
+            disabled={running || anyRunning || !canRun}
             className="btn-brand px-5 py-2.5 text-sm disabled:opacity-50"
           >
-            {running ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Play className="h-4 w-4" />}
-            {running ? "در حال آوردن آثار..." : "اجرای ایجنت"}
+            {running || anyRunning ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Play className="h-4 w-4" />}
+            {anyRunning ? "ایجنت در حال اجراست..." : running ? "در حال شروع..." : "اجرای ایجنت"}
           </button>
           {!canRun && (
             <p className="mt-2 text-[11px] text-amber-300">
@@ -242,8 +289,31 @@ export default function Agent() {
                   className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-left text-sm text-zinc-100"
                 />
                 <span className="mt-1 block leading-5 text-zinc-500">
-                  ایجنت فقط عنوان آثار این منبع را می‌خواند تا بفهمد چه چیزی را ندارید؛ اطلاعات کامل از TMDB می‌آید و لینک دانلود از منبع خوانده نمی‌شود (لینک را از پنل روی هر اثر می‌گذارید).
+                  ایجنت فقط عنوان آثار این منبع را می‌خواند تا بفهمد چه چیزی را ندارید؛ اطلاعات کامل (متادیتا، بازیگران، فصل و قسمت‌ها) از TMDB می‌آید.
                 </span>
+              </label>
+              <label className="mt-4 block text-xs text-zinc-400">
+                آدرس سایت دوم شما (منبع لینک‌های دانلود)
+                <input
+                  type="url"
+                  dir="ltr"
+                  placeholder="https://your-download-site.com"
+                  value={settings.download_source_url || ""}
+                  onChange={(e) => setSettings({ ...settings, download_source_url: e.target.value })}
+                  className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-left text-sm text-zinc-100"
+                />
+                <span className="mt-1 block leading-5 text-zinc-500">
+                  تنها چیزی که از TMDB نمی‌آید لینک دانلود است: ایجنت صفحه‌ی هر اثر را در این سایت (با جستجوی IMDb و عنوان) پیدا می‌کند و لینک‌ها را با کیفیت/حجم/زیرنویس به فیلم یا قسمت درست سریال وصل می‌کند. اگر خالی بماند، لینکی گرفته نمی‌شود.
+                </span>
+              </label>
+              <label className="mt-3 flex items-center gap-2 text-xs text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={settings.fetch_downloads !== false}
+                  onChange={(e) => setSettings({ ...settings, fetch_downloads: e.target.checked })}
+                  className="h-4 w-4 accent-rose-500"
+                />
+                گرفتن خودکار لینک دانلود هنگام آوردن هر اثر (برای هر پیش‌نویس هم دکمه‌ی تلاش دوباره هست)
               </label>
               <button
                 type="button"
@@ -327,6 +397,25 @@ export default function Agent() {
               <div className="p-3">
                 <h3 className="truncate text-sm font-bold text-zinc-50">{item.title}</h3>
                 <p dir="ltr" className="truncate text-left text-[11px] text-zinc-500">{item.original_title}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-zinc-400">
+                  <span className={`rounded-full px-2 py-0.5 ${item.downloads_count ? "bg-emerald-500/10 text-emerald-300" : "bg-white/5"}`}>
+                    لینک دانلود: {formatNumber(item.downloads_count || 0)}
+                  </span>
+                  {item.media_type === "series" && (
+                    <span className="rounded-full bg-white/5 px-2 py-0.5">
+                      {formatNumber(item.seasons_count || 0)} فصل • {formatNumber(item.episodes_count || 0)} قسمت
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchDownloads(item)}
+                  disabled={!canRun || fetchingId === item.id}
+                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-sky-500/10 py-2 text-xs font-bold text-sky-300 ring-1 ring-sky-500/25 transition hover:bg-sky-500/20 disabled:opacity-40"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {fetchingId === item.id ? "در حال گرفتن لینک..." : item.downloads_count ? "تلاش دوباره‌ی لینک دانلود" : "گرفتن لینک دانلود"}
+                </button>
                 {tab === "pending" ? (
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => act(item.id, "approve")} disabled={!canRun} className="flex items-center justify-center gap-1 rounded-xl bg-emerald-500/15 py-2 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/25 disabled:opacity-40">
@@ -343,7 +432,7 @@ export default function Agent() {
                 )}
                 {item.admin_edit_path && (
                   <Link to={item.admin_edit_path} className="mt-2 block text-center text-[11px] font-semibold text-rose-300 hover:text-rose-200">
-                    ویرایش در پنل (لینک دانلود و...)
+                    ویرایش کامل در پنل
                   </Link>
                 )}
               </div>

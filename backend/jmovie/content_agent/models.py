@@ -31,6 +31,17 @@ class AgentSettings(models.Model):
         default="",
         help_text="آدرس sitemap یا RSS سایت منبع برای کشف آثار (فقط عنوان خوانده می‌شود)",
     )
+    # سایت دوم کاربر: لینک‌های دانلود از این سایت برداشته می‌شود (اطلاعات
+    # فیلم/سریال همچنان فقط از TMDB می‌آید). خالی = لینک دانلود گرفته نمی‌شود.
+    download_source_url = models.URLField(
+        blank=True,
+        default="",
+        help_text="آدرس سایت منبع لینک‌های دانلود (سایت دوم شما)",
+    )
+    fetch_downloads = models.BooleanField(
+        default=True,
+        help_text="گرفتن خودکار لینک دانلود از سایت دوم هنگام آوردن هر اثر",
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
