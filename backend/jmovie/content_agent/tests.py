@@ -260,11 +260,16 @@ class FakeTMDBClient2(FakeTMDBClient):
     def movie_full_details(self, tmdb_id, language="fa-IR"):
         data = dict(MOVIE_DETAILS_2 if tmdb_id == 999010 else MOVIE_DETAILS)
         data["id"] = tmdb_id
+        if language == "en-US":
+            # مثل TMDB واقعی: عنوان در پاسخ انگلیسی، نام انگلیسی است
+            data["title"] = data.get("original_title") or data["title"]
         return data
 
     def tv_full_details(self, tmdb_id, language="fa-IR"):
         data = dict(SERIES_DETAILS)
         data["id"] = tmdb_id
+        if language == "en-US":
+            data["name"] = data.get("original_name") or data["name"]
         return data
 
 
@@ -418,3 +423,145 @@ class DownloadSourceTest(TestCase):
         movie.delete()
         res3 = client.post(f"/agent/drafts/{item.id}/approve/")
         self.assertEqual(res3.status_code, 400)
+
+
+# ---------------------------------------------------------------------------
+# قرارداد داده (title فارسی / original_title انگلیسی / پوستر انگلیسی)
+# و جستجوی مقاوم‌تر در سایت دوم
+# ---------------------------------------------------------------------------
+class FakeTMDBClientLang(FakeTMDBClient2):
+    """پاسخ TMDB به زبان فرق می‌کند و نام زبان اصلی اثر کره‌ای است."""
+
+    def movie_full_details(self, tmdb_id, language="fa-IR"):
+        base = {
+            "id": tmdb_id, "original_title": "원제목",
+            "release_date": "2024-01-01", "runtime": 100,
+            "vote_average": 8.0, "vote_count": 500,
+            "external_ids": {"imdb_id": "tt9990010"},
+            "genres": [], "credits": {"cast": [], "crew": []},
+            "images": {"backdrops": []},
+        }
+        if language == "en-US":
+            base.update({
+                "title": "English Movie Name", "overview": "English overview",
+                "poster_path": "/en-poster.jpg", "backdrop_path": "/en-bg.jpg",
+            })
+        else:
+            base.update({
+                "title": "نام فارسی فیلم", "overview": "خلاصه فارسی",
+                "poster_path": "/fa-poster.jpg", "backdrop_path": "/fa-bg.jpg",
+            })
+        return base
+
+    def tv_full_details(self, tmdb_id, language="fa-IR"):
+        data = dict(SERIES_DETAILS)
+        data["id"] = tmdb_id
+        if language == "en-US":
+            data.update({
+                "name": "English Show Name", "original_name": "원제",
+                "poster_path": "/en-sp.jpg", "backdrop_path": "/en-sbg.jpg",
+            })
+        else:
+            data.update({
+                "name": "سریال فارسی", "original_name": "원제",
+                "poster_path": "/fa-sp.jpg", "backdrop_path": "/fa-sbg.jpg",
+            })
+        return data
+
+
+class DataContractTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = False
+        settings_obj.save()
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientLang)
+    def test_title_persian_original_english_poster_english(self):
+        ContentAgent().run(sources=["trending"], max_items=10)
+        movie = Movie.objects.get(tmdb_id=999001)
+        self.assertEqual(movie.title, "نام فارسی فیلم")
+        self.assertEqual(movie.original_title, "English Movie Name")
+        self.assertTrue(movie.poster_url.endswith("/en-poster.jpg"))
+        self.assertTrue(movie.backdrop_url.endswith("/en-bg.jpg"))
+
+        show = Series.objects.get(tmdb_id=999101)
+        self.assertEqual(show.title, "سریال فارسی")
+        self.assertEqual(show.original_title, "English Show Name")
+        self.assertTrue(show.poster_url.endswith("/en-sp.jpg"))
+
+
+PERSIAN_SEARCH_HTML = """<html><body>
+<a href="https://dl.example.com/m/12345/">دانلود فیلم نام فارسی فیلم با کیفیت عالی</a>
+<a href="https://dl.example.com/about/">درباره ما</a>
+</body></html>"""
+
+
+def _fake_fetch_persian(_session, url):
+    if "s=" in url or "/search" in url:
+        return PERSIAN_SEARCH_HTML, url
+    return "<html><body></body></html>", url
+
+
+class DownloadFinderTest(TestCase):
+    def test_persian_title_tokens_find_the_page(self):
+        from content_agent import download_source
+
+        with patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_persian):
+            pages = download_source.find_title_pages(
+                object(), "https://dl.example.com",
+                imdb_id="", original_title="Completely Different Words",
+                title="نام فارسی فیلم", year=2024,
+            )
+        self.assertEqual(pages, ["https://dl.example.com/m/12345/"])
+
+    def test_session_uses_browser_user_agent(self):
+        from content_agent import download_source
+
+        ua = download_source._session().headers.get("User-Agent", "")
+        self.assertIn("Mozilla", ua)
+
+    @patch("content_agent.download_source.fetch_html")
+    def test_follow_download_page_then_attach_and_reason(self, mock_fetch):
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return (
+                    '<html><body><a href="https://dl.example.com/movie/english-movie-name/">English Movie Name دانلود</a></body></html>',
+                    url,
+                )
+            if url.rstrip("/").endswith("english-movie-name"):
+                return (
+                    '<html><body><a href="https://dl.example.com/dl/english-movie-name/">دانلود فیلم</a></body></html>',
+                    url,
+                )
+            return (
+                '<html><body><a href="https://dl.example.com/files/English.Movie.2024.1080p.mkv">دانلود 1080p حجم 2 GB زیرنویس</a></body></html>',
+                url,
+            )
+
+        mock_fetch.side_effect = fake
+        settings_obj = AgentSettings.load()
+        settings_obj.download_source_url = "https://dl.example.com"
+        settings_obj.save()
+        movie = Movie.objects.create(
+            title="نام فارسی فیلم", original_title="English Movie Name",
+            imdb_id="tt1234567", tmdb_id=424242, runtime=100, year=2024,
+        )
+        summary = ContentAgent().fetch_downloads_for(movie, "movie")
+        self.assertEqual(summary["found"], 1)
+        self.assertEqual(summary["created"], 1)
+        ct = ContentType.objects.get_for_model(Movie)
+        self.assertEqual(Download.objects.filter(content_type=ct, object_id=movie.id).count(), 1)
+
+        # هیچ نتیجه‌ای -> دلیل خالی‌نبودن هم برمی‌گردد
+        mock_fetch.side_effect = lambda _s, url: ("<html><body>بدون نتیجه</body></html>", url)
+        movie2 = Movie.objects.create(
+            title="اثر دیگر", original_title="Nothing Here",
+            imdb_id="tt7654321", tmdb_id=434343, runtime=90,
+        )
+        summary2 = ContentAgent().fetch_downloads_for(movie2, "movie")
+        self.assertEqual(summary2["found"], 0)
+        self.assertTrue(summary2.get("reason"))
