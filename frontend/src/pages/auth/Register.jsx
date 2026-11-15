@@ -26,7 +26,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function Register() {
   useSeo({
     title: "ثبت‌نام | مووی‌ورس",
-    description: "در مووی‌ورس رایگان ثبت‌نام کنید و لیست علاقه‌مندی‌ها و تماشای خود را بسازید.",
+    description: "در مووی‌ورس رایگان ثبت‌نام کنید؛ دانلود فیلم و سریال کاملاً رایگان است و فقط به ورود نیاز دارد — بدون خرید اشتراک.",
     path: "/register",
     noindex: true,
   });
@@ -142,7 +142,7 @@ function Register() {
         image={for_login}
         imageAlt="ثبت‌نام در مووی‌ورس"
         title="حسابت ساخته شد! 🎉"
-        subtitle="ثبت‌نام با موفقیت انجام شد. حالا می‌توانی وارد حسابت شوی."
+        subtitle="ثبت‌نام با موفقیت انجام شد. حالا وارد حسابت شو و رایگان دانلود کن؛ اشتراکی در کار نیست."
       >
         <div className="flex flex-col items-center text-center">
           <div className={`flex h-28 w-28 items-center justify-center overflow-hidden rounded-full ${BRAND} shadow-[0_20px_50px_rgba(225,29,72,0.35)] ring-4 ring-white/10`}>
@@ -252,7 +252,7 @@ function Register() {
       image={for_login}
       imageAlt="ثبت‌نام در مووی‌ورس"
       title="ساخت حساب جدید"
-      subtitle="رایگان ثبت‌نام کن؛ لیست تماشا بساز، فیلم‌ها را ذخیره کن و به دانلودهای VIP دسترسی داشته باش."
+      subtitle="کاملاً رایگان ثبت‌نام کن، بدون خرید هیچ اشتراکی؛ فقط با ساخت حساب می‌توانی همه‌ی فیلم و سریال‌ها را دانلود کنی، لیست تماشا بسازی و فیلم‌ها را ذخیره کنی."
     >
       <form onSubmit={goAvatarStep} noValidate className="space-y-4">
         <GeneralError message={generalError} />

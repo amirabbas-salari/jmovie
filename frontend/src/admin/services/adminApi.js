@@ -111,6 +111,7 @@ export const agentApi = {
   drafts: async (params = {}) => (await api.get("/agent/drafts/", { params })).data,
   act: async (id, action) => (await api.post(`/agent/drafts/${id}/${action}/`)).data,
   bulk: async (ids, action) => (await api.post("/agent/drafts/bulk/", { ids, action })).data,
+  fetchDownloads: async (id) => (await api.post(`/agent/drafts/${id}/fetch-downloads/`)).data,
 }
 
 // سازگاری با نام‌های قدیمی (اگر جایی هنوز استفاده شوند)

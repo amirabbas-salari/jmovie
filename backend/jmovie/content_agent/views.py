@@ -48,7 +48,9 @@ class AgentSettingsView(APIView):
 
 
 class AgentRunView(APIView):
-    """اجرای دستی ایجنت از پنل (همزمان؛ سقف پیش‌فرض ۲۰ اثر)."""
+    """اجرای دستی ایجنت از پنل — در پس‌زمینه اجرا می‌شود تا درخواست HTTP
+    به‌خاطر طولانی‌شدن کار (TMDB + ترجمه + لینک دانلود) timeout نگیرد.
+    پنل وضعیت را از فهرست اجراها poll می‌کند."""
 
     permission_classes = [IsStaffMember, AgentWritePermission]
 
@@ -63,15 +65,25 @@ class AgentRunView(APIView):
                     {"max_items": "باید عدد باشد."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+        from datetime import timedelta
+
+        recent_running = AgentRun.objects.filter(
+            status=AgentRun.STATUS_RUNNING,
+            started_at__gte=timezone.now() - timedelta(minutes=30),
+        ).exists()
+        if recent_running:
+            return Response(
+                {"detail": "یک اجرای ایجنت همین حالا در حال انجام است؛ صبر کنید تمام شود."},
+                status=status.HTTP_409_CONFLICT,
+            )
         agent = ContentAgent()
-        run = agent.run(
+        run = agent.run_async(
             triggered_by=request.user,
-            trigger_type=AgentRun.TRIGGER_MANUAL,
             sources=sources,
             max_items=max_items,
         )
         return Response(
-            AgentRunSerializer(run).data, status=status.HTTP_201_CREATED
+            AgentRunSerializer(run).data, status=status.HTTP_202_ACCEPTED
         )
 
 
@@ -112,6 +124,40 @@ def _set_media_active(item, active):
         model.objects.filter(id=item.object_id).update(is_active=active)
 
 
+def _get_media(item):
+    model = Movie if item.media_type == "movie" else Series
+    if not item.object_id:
+        return None
+    return model.objects.filter(id=item.object_id).first()
+
+
+class AgentDraftFetchDownloadsView(APIView):
+    """گرفتن/تلاش مجدد لینک‌های دانلود یک پیش‌نویس از سایت دوم (تنظیمات)."""
+
+    permission_classes = [IsStaffMember, AgentWritePermission]
+
+    def post(self, request, pk):
+        try:
+            item = AgentImportedItem.objects.get(pk=pk)
+        except AgentImportedItem.DoesNotExist:
+            return Response(
+                {"detail": "یافت نشد."}, status=status.HTTP_404_NOT_FOUND
+            )
+        media = _get_media(item)
+        if media is None:
+            return Response(
+                {"detail": "اثر این پیش‌نویس در سایت پیدا نشد."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        summary = ContentAgent().fetch_downloads_for(media, item.media_type)
+        return Response(
+            {
+                "summary": summary,
+                "item": AgentImportedItemSerializer(item).data,
+            }
+        )
+
+
 class AgentDraftActionView(APIView):
     """approve → انتشار اثر (is_active=True) | reject → ماندن مخفی + لیست سیاه"""
 
@@ -133,6 +179,11 @@ class AgentDraftActionView(APIView):
 
     def _apply(self, request, item, action):
         if action == "approve":
+            if _get_media(item) is None:
+                # اثر پاک شده؛ تأیید نباید الکی «منتشر شد» نشان دهد
+                from rest_framework.exceptions import ValidationError
+
+                raise ValidationError("اثر این پیش‌نویس در سایت پیدا نشد (احتمالاً حذف شده است).")
             _set_media_active(item, True)
             item.status = AgentImportedItem.STATUS_APPROVED
         else:
