@@ -12,7 +12,7 @@ import { BRAND, parseApiErrors } from "./authUtils";
 function Login() {
   useSeo({
     title: "ورود به حساب کاربری | مووی‌ورس",
-    description: "وارد حساب مووی‌ورس شوید تا به لیست علاقه‌مندی‌ها و دانلودهای VIP دسترسی داشته باشید.",
+    description: "وارد حساب مووی‌ورس شوید؛ دانلود در مووی‌ورس کاملاً رایگان است و فقط به ورود نیاز دارد — بدون خرید اشتراک.",
     path: "/login",
     noindex: true,
   });
@@ -76,7 +76,7 @@ function Login() {
       image={login_image}
       imageAlt="ورود به مووی‌ورس"
       title="خوش برگشتی! 👋"
-      subtitle="برای ادامه وارد حسابت شو تا به لیست تماشا، علاقه‌مندی‌ها و دانلودهای VIP دسترسی داشته باشی."
+      subtitle="مووی‌ورس کاملاً رایگان است و برای دانلود نیازی به خرید اشتراک نیست؛ فقط وارد حسابت شو تا دانلود کنی و به لیست تماشا و علاقه‌مندی‌هایت برسی."
     >
       <form onSubmit={submit} noValidate className="space-y-4">
         <GeneralError message={generalError} />

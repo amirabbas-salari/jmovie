@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, ArrowRight, BadgeCheck, Eye, EyeOff } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { BRAND, authInputCls } from "./authUtils";
 
@@ -121,6 +121,10 @@ export default function AuthShell({ activeTab, image, imageAlt = "", title, subt
             <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 ${BRAND} opacity-80`} />
             <h1 className="text-2xl font-extrabold">{title}</h1>
             {subtitle && <p className="mt-2 text-sm leading-7 text-white/60">{subtitle}</p>}
+            <p className="mt-4 flex items-start gap-2 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-[13px] leading-6 text-emerald-200">
+              <BadgeCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+              مووی‌ورس کاملاً رایگان است؛ برای دانلود هیچ اشتراکی لازم نیست — فقط کافی است وارد حسابت شوی.
+            </p>
             <div className="mt-6">{children}</div>
           </div>
 
@@ -137,10 +141,10 @@ export default function AuthShell({ activeTab, image, imageAlt = "", title, subt
             <p className="text-xl font-extrabold leading-9">
               هزاران فیلم و سریال،
               <br />
-              <span className={`${BRAND} bg-clip-text text-transparent`}>یک اشتراک فاصله داری</span>
+              <span className={`${BRAND} bg-clip-text text-transparent`}>کاملاً رایگان، بدون اشتراک</span>
             </p>
             <div className="mt-4 flex flex-wrap gap-2 text-xs text-white/80">
-              {["دانلود با کیفیت‌های مختلف", "لیست تماشای شخصی", "دسترسی VIP به لینک‌ها"].map((t) => (
+              {["دانلود رایگان با کیفیت‌های مختلف", "فقط با ورود، بدون خرید اشتراک", "لیست تماشای شخصی"].map((t) => (
                 <span key={t} className="rounded-full border border-white/15 bg-black/45 px-3 py-1.5 backdrop-blur">{t}</span>
               ))}
             </div>
