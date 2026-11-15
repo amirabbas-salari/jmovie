@@ -130,7 +130,7 @@ export default function Agent() {
       if (s.error) {
         setError(s.error)
       } else if (!s.found) {
-        setNotice(`برای «${item.title}» در سایت دوم لینک دانلودی پیدا نشد. آدرس سایت و عنوان اثر را بررسی کنید.`)
+        setNotice(s.reason || `برای «${item.title}» در سایت دوم لینک دانلودی پیدا نشد. آدرس سایت و عنوان اثر را بررسی کنید.`)
       } else {
         setNotice(`«${item.title}»: ${formatNumber(s.found)} لینک دانلود پیدا شد و ${formatNumber(s.created)} لینک جدید وصل شد.`)
       }

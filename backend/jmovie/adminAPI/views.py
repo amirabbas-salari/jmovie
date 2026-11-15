@@ -244,7 +244,7 @@ class TmdbLookupView(APIView):
             return Response({"detail": "پارامترهای type/by/value معتبر نیستند."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        cache_key = f"tmdb-lookup:{media_type}:{by}:{value}"
+        cache_key = f"tmdb-lookup:v2:{media_type}:{by}:{value}"
         cached = cache.get(cache_key)
         if cached:
             return Response(cached)
@@ -258,21 +258,32 @@ class TmdbLookupView(APIView):
                                     status=status.HTTP_404_NOT_FOUND)
             else:
                 tmdb_id = int(value)
-            data = (client.movie_full_details(tmdb_id) if media_type == "movie"
-                    else client.tv_full_details(tmdb_id))
+            if media_type == "movie":
+                data = client.movie_full_details(tmdb_id)
+            else:
+                data = client.tv_full_details(tmdb_id)
+            # پاسخ انگلیسی هم گرفته می‌شود: نام انگلیسی و پوستر اصلی/انگلیسی
+            # از آن می‌آید (قرارداد: title فارسی، original_title انگلیسی).
+            try:
+                en_data = (client.movie_full_details(tmdb_id, language="en-US")
+                           if media_type == "movie"
+                           else client.tv_full_details(tmdb_id, language="en-US"))
+            except Exception:
+                en_data = {}
         except (ValueError, TypeError):
             return Response({"detail": "TMDB ID باید عدد باشد."}, status=status.HTTP_400_BAD_REQUEST)
         except Exception:
             return Response({"detail": "ارتباط با TMDB برقرار نشد؛ دوباره تلاش کنید."},
                             status=status.HTTP_502_BAD_GATEWAY)
 
-        payload = self._normalize(media_type, data)
+        payload = self._normalize(media_type, data, en_data)
         cache.set(cache_key, payload, 60 * 60 * 24)
         return Response(payload)
 
     @staticmethod
-    def _normalize(media_type, data):
+    def _normalize(media_type, data, en_data=None):
         is_movie = media_type == "movie"
+        en_data = en_data or {}
         credits = data.get("credits") or {}
         cast_items = []
         seen = set()
@@ -320,7 +331,13 @@ class TmdbLookupView(APIView):
             "tmdb_id": data.get("id"),
             "imdb_id": (data.get("external_ids") or {}).get("imdb_id") or data.get("imdb_id") or "",
             "title": (data.get("title") if is_movie else data.get("name")) or "",
-            "original_title": (data.get("original_title") if is_movie else data.get("original_name")) or "",
+            # نام انگلیسی اثر؛ فیلد original_title/original_name در TMDB
+            # نامِ زبان اصلی فیلم است و نباید اینجا بیاید.
+            "original_title": (
+                (en_data.get("title") if is_movie else en_data.get("name"))
+                or (data.get("original_title") if is_movie else data.get("original_name"))
+                or ""
+            ),
             "description": data.get("overview") or "",
             "release_date": (data.get("release_date") if is_movie else data.get("first_air_date")) or "",
             "start_date": "" if is_movie else (data.get("first_air_date") or ""),
@@ -328,8 +345,9 @@ class TmdbLookupView(APIView):
             "runtime": runtime,
             "imdb_rating": round(float(data["vote_average"]), 1) if data.get("vote_average") else None,
             "imdb_votes": data.get("vote_count") or 0,
-            "poster_url": _tmdb_img(data.get("poster_path"), "w500"),
-            "backdrop_url": _tmdb_img(data.get("backdrop_path"), "w1280"),
+            # پوستر اصلی/انگلیسی، نه پوستر فارسی‌سازی‌شده
+            "poster_url": _tmdb_img(en_data.get("poster_path") or data.get("poster_path"), "w500"),
+            "backdrop_url": _tmdb_img(en_data.get("backdrop_path") or data.get("backdrop_path"), "w1280"),
             # تا ۵ تصویر آماده برای تب گالری فرم (با همان بیس‌لینک تصاویر)
             "gallery_images": _tmdb_gallery_images(data),
             "country": countries[0].get("name", "") if countries else "",

@@ -383,7 +383,10 @@ class ContentAgent:
         original_field = "original_title" if is_movie else "original_name"
         title = self._maybe_translate(fa, en, title_field, is_title=True)
         description = self._maybe_translate(fa, en, "overview")
-        original_title = en.get(original_field) or fa.get(original_field) or title
+        # قرارداد داده: title = نام فارسی، original_title = نام انگلیسی اثر.
+        # فیلد original_title/original_name در TMDB نامِ زبان اصلی فیلم است
+        # (مثلاً کره‌ای) و نباید در original_title ذخیره شود.
+        original_title = en.get(title_field) or en.get(original_field) or fa.get(original_field) or title
 
         genres = self._get_or_create_genres(fa.get("genres") or en.get("genres"))
         rating = round(float(fa.get("vote_average") or candidate["vote_average"]), 1) or None
@@ -406,8 +409,8 @@ class ContentAgent:
                     tmdb_id=tmdb_id,
                     imdb_rating=rating,
                     imdb_votes=votes,
-                    poster_url=_img(fa.get("poster_path"), "w500"),
-                    backdrop_url=_img(fa.get("backdrop_path"), "w1280"),
+                    poster_url=_img(en.get("poster_path") or fa.get("poster_path"), "w500"),
+                    backdrop_url=_img(en.get("backdrop_path") or fa.get("backdrop_path"), "w1280"),
                     country=country,
                     is_active=False,  # پیش‌نویس؛ با تأیید ادمین منتشر می‌شود
                 )
@@ -422,8 +425,8 @@ class ContentAgent:
                     tmdb_id=tmdb_id,
                     imdb_rating=rating,
                     imdb_votes=votes,
-                    poster_url=_img(fa.get("poster_path"), "w500"),
-                    backdrop_url=_img(fa.get("backdrop_path"), "w1280"),
+                    poster_url=_img(en.get("poster_path") or fa.get("poster_path"), "w500"),
+                    backdrop_url=_img(en.get("backdrop_path") or fa.get("backdrop_path"), "w1280"),
                     number_of_seasons=fa.get("number_of_seasons"),
                     number_of_episodes=fa.get("number_of_episodes"),
                     is_ended=fa.get("status") == "Ended",
