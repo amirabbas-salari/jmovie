@@ -19,7 +19,13 @@ export function TextField({ icon: Icon, error, ...props }) {
   return (
     <div>
       <div className="relative">
-        <input {...props} aria-invalid={!!error} className={authInputCls(error)} />
+        {/* ps-11: فضای سمت شروع متن برای آیکون. قبلاً فقط pe-11 بود و در
+            حالت راست‌چین متن از زیر آیکون شروع و با آن هم‌پوشان می‌شد. */}
+        <input
+          {...props}
+          aria-invalid={!!error}
+          className={`${authInputCls(error)}${Icon ? " ps-11" : ""}`}
+        />
         {Icon && (
           <Icon className="pointer-events-none absolute right-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-white/45" />
         )}
