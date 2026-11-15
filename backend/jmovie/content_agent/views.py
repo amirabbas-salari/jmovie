@@ -57,6 +57,15 @@ class AgentRunView(APIView):
     def post(self, request):
         sources = request.data.get("sources") or None
         max_items = request.data.get("max_items") or None
+        media_types = request.data.get("media_types") or None
+        if media_types is not None:
+            if not isinstance(media_types, list) or any(
+                t not in ("movie", "series") for t in media_types
+            ):
+                return Response(
+                    {"media_types": "باید فهرستی شامل movie و/یا series باشد."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         if max_items is not None:
             try:
                 max_items = max(1, min(int(max_items), 100))
@@ -81,6 +90,7 @@ class AgentRunView(APIView):
             triggered_by=request.user,
             sources=sources,
             max_items=max_items,
+            media_types=media_types,
         )
         return Response(
             AgentRunSerializer(run).data, status=status.HTTP_202_ACCEPTED

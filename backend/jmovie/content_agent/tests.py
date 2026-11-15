@@ -638,3 +638,67 @@ class DownloadMetadataTest(TestCase):
         self.assertEqual(saved.quality, "1080p BluRay")
         self.assertEqual(saved.language, "original")
         self.assertTrue(saved.subtitle)
+
+
+# ---------------------------------------------------------------------------
+# فیلتر نوع اثر: فقط فیلم / فقط سریال
+# ---------------------------------------------------------------------------
+class MediaTypeFilterTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = False
+        settings_obj.media_types = []
+        settings_obj.save()
+
+    def _set_types(self, types):
+        settings_obj = AgentSettings.load()
+        settings_obj.media_types = types
+        settings_obj.save()
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClient2)
+    def test_series_only_filter(self):
+        self._set_types(["series"])
+        run = ContentAgent().run(sources=["trending"], max_items=10)
+        self.assertEqual(run.created_series, 1)
+        self.assertEqual(run.created_movies, 0)
+        self.assertEqual(Movie.objects.count(), 0)
+        # پیش‌نویس سریال با نوع دامنه ذخیره می‌شود، نه «tv» خام TMDB
+        item = AgentImportedItem.objects.get(tmdb_id=999101)
+        self.assertEqual(item.media_type, "series")
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClient2)
+    def test_movie_only_filter(self):
+        self._set_types(["movie"])
+        run = ContentAgent().run(sources=["trending"], max_items=10)
+        self.assertEqual(run.created_movies, 2)
+        self.assertEqual(run.created_series, 0)
+        self.assertEqual(Series.objects.count(), 0)
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClient2)
+    def test_empty_means_both_and_per_run_override(self):
+        # override روی خود اجرا، بدون دست‌زدن به تنظیمات ذخیره‌شده
+        run = ContentAgent().run(sources=["trending"], max_items=10, media_types=["movie"])
+        self.assertEqual(run.created_movies, 2)
+        self.assertEqual(run.created_series, 0)
+        # بدون فیلتر (تنظیمات خالی) هر دو نوع می‌آیند
+        run2 = ContentAgent().run(sources=["trending"], max_items=10)
+        self.assertEqual(run2.created_series, 1)
+
+    def test_settings_api_roundtrip_and_validation(self):
+        admin = User.objects.create_user(
+            username="boss3", password="Str0ng!Pass123", is_staff=True, is_superuser=True
+        )
+        client = APIClient()
+        client.force_authenticate(admin)
+        res = client.patch("/agent/settings/", {"media_types": ["series"]}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["media_types"], ["series"])
+        res = client.get("/agent/settings/")
+        self.assertEqual(res.data["media_types"], ["series"])
+        # مقادیر نامعتبر از فهرست حذف می‌شوند
+        res = client.patch("/agent/settings/", {"media_types": ["movie", "book"]}, format="json")
+        self.assertEqual(res.data["media_types"], ["movie"])

@@ -44,6 +44,17 @@ MAX_PAGES_PER_SOURCE = 2
 MAX_CAST = 10
 
 
+def _normalize_media_types(values):
+    """زیرمجموعه‌ی معتبر از ['movie', 'series']؛ خالی/نامعتبر یعنی هر دو."""
+    allowed = [v for v in (values or []) if v in ("movie", "series")]
+    return allowed or ["movie", "series"]
+
+
+def _domain_media_type(candidate_media_type):
+    """نوع کاندیدای TMDB («tv») به نوع دامنه‌ی سایت («series») تبدیل می‌شود."""
+    return "movie" if candidate_media_type == "movie" else "series"
+
+
 def _img(path, size="w500"):
     # بیس‌لینک تصاویر از settings (متغیر محیطی TMDB_IMAGE_BASE_URL) خوانده
     # می‌شود تا پوستر/بک‌گراند/پروفایل ایجنت هم روی همان CDN/پروکسی ساخته شود.
@@ -71,12 +82,18 @@ class ContentAgent:
         self.client = TMDBClient()
 
     # ---------------- کشف از منبع سفارشی (sitemap/RSS یک سایت) ----------------
-    def discover_from_custom_source(self, limit):
+    def discover_from_custom_source(self, limit, allowed_media_types=None):
         """از sitemap/RSS منبع فقط «عنوان» آثار خوانده و در TMDB پیدا
         می‌شود. هیچ لینک دانلودی از منبع خوانده یا ذخیره نمی‌شود."""
         import re
 
         import requests
+
+        allowed = _normalize_media_types(
+            allowed_media_types
+            if allowed_media_types is not None
+            else getattr(self.config, "media_types", None)
+        )
 
         url = (self.config.discovery_source_url or "").strip()
         if not url:
@@ -166,6 +183,8 @@ class ContentAgent:
                         break
             if resolved is None:
                 continue
+            if _domain_media_type(resolved["media_type"]) not in allowed:
+                continue
             if resolved["vote_average"] < self.config.min_rating:
                 continue
             if resolved["vote_count"] < self.config.min_votes and not imdb_id:
@@ -180,16 +199,23 @@ class ContentAgent:
         return candidates
 
     # ---------------- کشف ----------------
-    def discover(self, sources, limit):
+    def discover(self, sources, limit, media_types=None):
         """کاندیداها: [{media_type, tmdb_id, vote_average, vote_count}]"""
+        allowed = _normalize_media_types(
+            media_types
+            if media_types is not None
+            else getattr(self.config, "media_types", None)
+        )
         seen = {}
         if "custom" in sources:
-            for candidate in self.discover_from_custom_source(limit):
+            for candidate in self.discover_from_custom_source(limit, allowed):
                 seen[(candidate["media_type"], candidate["tmdb_id"])] = candidate
         for source in sources:
             if source == "custom":
                 continue
             for media_type, endpoint in SOURCE_ENDPOINTS.get(source, []):
+                if _domain_media_type(media_type) not in allowed:
+                    continue  # فیلتر نوع اثر (فقط فیلم / فقط سریال)
                 for page in range(1, MAX_PAGES_PER_SOURCE + 1):
                     try:
                         data = self.client._get(endpoint, {"page": page, "language": "en-US"})
@@ -358,7 +384,8 @@ class ContentAgent:
 
     # ---------------- وارد کردن یک اثر ----------------
     def import_candidate(self, run, candidate):
-        media_type = candidate["media_type"]
+        # نوع دامنه («series») ذخیره می‌شود، نه نوع TMDB («tv»)
+        media_type = _domain_media_type(candidate["media_type"])
         tmdb_id = candidate["tmdb_id"]
         is_movie = media_type == "movie"
 
@@ -498,13 +525,13 @@ class ContentAgent:
 
     # ---------------- اجرای کامل ----------------
     def run(self, triggered_by=None, trigger_type=AgentRun.TRIGGER_MANUAL,
-            sources=None, max_items=None):
+            sources=None, max_items=None, media_types=None):
         """اجرای همزمان (cron و تست). اجرای پنل از run_async استفاده می‌کند."""
         run = self._create_run(triggered_by, trigger_type, sources)
-        self._execute(run, max_items)
+        self._execute(run, max_items, media_types)
         return run
 
-    def run_async(self, triggered_by=None, sources=None, max_items=None):
+    def run_async(self, triggered_by=None, sources=None, max_items=None, media_types=None):
         """اجرای پس‌زمینه برای پنل: درخواست HTTP منتظر پایان کار نمی‌ماند و
         پنل از روی وضعیت run پیشرفت را می‌بیند."""
         import threading
@@ -513,7 +540,7 @@ class ContentAgent:
 
         def _target():
             try:
-                self._execute(run, max_items)
+                self._execute(run, max_items, media_types)
             finally:
                 from django.db import connection
 
@@ -530,18 +557,19 @@ class ContentAgent:
             status=AgentRun.STATUS_RUNNING,
         )
 
-    def _execute(self, run, max_items=None):
+    def _execute(self, run, max_items=None, media_types=None):
         sources = run.sources or ["trending", "popular"]
         limit = max_items or self.config.max_items_per_run
         try:
-            candidates = self.discover(sources, limit * 3)  # حاشیه برای تکراری‌ها
+            candidates = self.discover(sources, limit * 3, media_types=media_types)  # حاشیه برای تکراری‌ها
             run.found_count = len(candidates)
             run.save(update_fields=["found_count"])
             created = 0
             for candidate in candidates:
                 if created >= limit:
                     break
-                media_type, tmdb_id = candidate["media_type"], candidate["tmdb_id"]
+                media_type = _domain_media_type(candidate["media_type"])
+                tmdb_id = candidate["tmdb_id"]
                 if self._blacklisted(media_type, tmdb_id):
                     run.blacklisted_skipped += 1
                 elif self._already_have(media_type, tmdb_id):
