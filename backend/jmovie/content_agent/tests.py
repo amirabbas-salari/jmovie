@@ -565,3 +565,76 @@ class DownloadFinderTest(TestCase):
         summary2 = ContentAgent().fetch_downloads_for(movie2, "movie")
         self.assertEqual(summary2["found"], 0)
         self.assertTrue(summary2.get("reason"))
+
+
+# ---------------------------------------------------------------------------
+# استخراج متادیتای لینک دانلود: کیفیت، زیرنویس، دوبله، حجم، فصل/قسمت
+# ---------------------------------------------------------------------------
+class DownloadMetadataTest(TestCase):
+    BASE = "https://dl.example.com/movie/x/"
+
+    def extract(self, html):
+        from content_agent import download_source
+
+        return download_source.extract_download_links(html, self.BASE)
+
+    def test_quality_label_before_anchor_and_no_cross_bleed(self):
+        html = """<html><body>
+        <div><span>کیفیت 720p</span><a href="https://dl.example.com/files/f1.mkv">دانلود</a></div>
+        <div><span>کیفیت 1080p BluRay</span><a href="https://dl.example.com/files/f2.mkv">دانلود</a></div>
+        </body></html>"""
+        links = self.extract(html)
+        self.assertEqual([l["quality"] for l in links], ["720p", "1080p BluRay"])
+
+    def test_url_filename_wins_for_quality_and_dubbed(self):
+        html = (
+            '<a href="https://dl.example.com/files/Movie.2024.720p.WEB-DL.x265.Dubbed.mkv">'
+            "دانلود با لینک مستقیم</a><span>نسخه 1080p هم موجود است</span>"
+        )
+        links = self.extract(html)
+        self.assertEqual(len(links), 1)
+        self.assertEqual(links[0]["quality"], "720p WEB-DL x265")
+        self.assertEqual(links[0]["language"], "دوبله فارسی")
+
+    def test_subtitle_contract_and_negation(self):
+        html = """<html><body>
+        <a href="https://dl.example.com/files/a.1080p.mkv">دانلود زیرنویس فارسی چسبیده</a>
+        <a href="https://dl.example.com/files/b.720p.mkv">دانلود بدون زیرنویس</a>
+        </body></html>"""
+        links = self.extract(html)
+        # قرارداد نمایش کارت دانلود: زیرنویس‌دار = زبان اصلی + subtitle
+        self.assertEqual(links[0]["language"], "original")
+        self.assertTrue(links[0]["subtitle"])
+        self.assertEqual(links[1]["language"], "original")
+        self.assertFalse(links[1]["subtitle"])
+
+    def test_persian_size_and_season_episode(self):
+        html = '<a href="https://dl.example.com/files/show.mkv">دانلود فصل ۲ قسمت ۵ کیفیت 720p حجم ۱٫۴ گیگابایت</a>'
+        link = self.extract(html)[0]
+        self.assertEqual((link["season"], link["episode"]), (2, 5))
+        self.assertTrue(link["size"].startswith("1.4"))
+
+    def test_attach_updates_metadata_on_refetch(self):
+        from content_agent import download_source
+
+        movie = Movie.objects.create(
+            title="فیلم", original_title="M", imdb_id="tt0001",
+            tmdb_id=11, runtime=90,
+        )
+        ct = ContentType.objects.get_for_model(Movie)
+        Download.objects.create(
+            content_type=ct, object_id=movie.id,
+            url="https://dl.example.com/f.mkv",
+            quality="نامشخص", language="زیرنویس فارسی", subtitle=False,
+        )
+        created = download_source.attach_downloads(movie, "movie", [{
+            "url": "https://dl.example.com/f.mkv", "title": "",
+            "quality": "1080p BluRay", "size": "2 GB",
+            "language": "original", "subtitle": True,
+            "season": None, "episode": None,
+        }])
+        self.assertEqual(created, 0)
+        saved = Download.objects.get(content_type=ct, object_id=movie.id)
+        self.assertEqual(saved.quality, "1080p BluRay")
+        self.assertEqual(saved.language, "original")
+        self.assertTrue(saved.subtitle)
