@@ -4,10 +4,19 @@ from .models import AgentImportedItem, AgentRun, AgentSettings
 
 
 class AgentSettingsSerializer(serializers.ModelSerializer):
+    def validate_media_types(self, value):
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError("باید فهرستی از نوع‌ها باشد.")
+        allowed = [v for v in value if v in ("movie", "series")]
+        return allowed
+
     class Meta:
         model = AgentSettings
         fields = [
             "sources",
+            "media_types",
             "max_items_per_run",
             "min_rating",
             "min_votes",

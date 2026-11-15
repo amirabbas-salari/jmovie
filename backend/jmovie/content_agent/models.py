@@ -31,6 +31,13 @@ class AgentSettings(models.Model):
         default="",
         help_text="آدرس sitemap یا RSS سایت منبع برای کشف آثار (فقط عنوان خوانده می‌شود)",
     )
+    # فیلتر نوع اثر: ایجنت فقط نوع‌های انتخاب‌شده را پیدا می‌کند
+    # (زیرمجموعه‌ای از ["movie", "series"]؛ خالی = هر دو)
+    media_types = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="نوع آثاری که ایجنت پیدا کند: movie و/یا series؛ خالی یعنی هر دو",
+    )
     # سایت دوم کاربر: لینک‌های دانلود از این سایت برداشته می‌شود (اطلاعات
     # فیلم/سریال همچنان فقط از TMDB می‌آید). خالی = لینک دانلود گرفته نمی‌شود.
     download_source_url = models.URLField(

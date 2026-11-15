@@ -92,6 +92,21 @@ export default function Agent() {
     })
   }
 
+  const toggleMediaType = (value) => {
+    setSettings((prev) => {
+      if (!prev) return prev
+      const current = prev.media_types?.length ? prev.media_types : ["movie", "series"]
+      const has = current.includes(value)
+      if (has && current.length === 1) return prev // حداقل یک نوع باید فعال بماند
+      return {
+        ...prev,
+        media_types: has
+          ? current.filter((t) => t !== value)
+          : [...current, value],
+      }
+    })
+  }
+
   const saveSettings = async () => {
     setSavingSettings(true)
     try {
@@ -239,6 +254,31 @@ export default function Agent() {
                     </button>
                   )
                 })}
+              </div>
+              <p className="mb-2 text-xs font-semibold text-zinc-300">نوع آثاری که ایجنت پیدا کند</p>
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                {[
+                  { value: "movie", label: "فقط فیلم‌ها" },
+                  { value: "series", label: "فقط سریال‌ها" },
+                ].map((opt) => {
+                  const current = settings.media_types?.length ? settings.media_types : ["movie", "series"]
+                  const active = current.includes(opt.value)
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => toggleMediaType(opt.value)}
+                      className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                        active
+                          ? "border-transparent bg-gradient-to-l from-rose-500 to-violet-600 text-white"
+                          : "border-white/15 bg-white/5 text-zinc-300 hover:bg-white/10"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  )
+                })}
+                <span className="text-[11px] leading-5 text-zinc-500">هر دو فعال = فیلم و سریال با هم؛ بعد از تغییر، «ذخیره تنظیمات» را بزنید.</span>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <label className="text-xs text-zinc-400">
