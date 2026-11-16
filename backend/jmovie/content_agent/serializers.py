@@ -24,6 +24,8 @@ class AgentSettingsSerializer(serializers.ModelSerializer):
             "discovery_source_url",
             "download_source_url",
             "fetch_downloads",
+            "release_date_from",
+            "release_date_to",
             "updated_at",
         ]
 
@@ -47,6 +49,7 @@ class AgentRunSerializer(serializers.ModelSerializer):
             "blacklisted_skipped",
             "created_movies",
             "created_series",
+            "auto_removed_count",
             "created_total",
             "failed_count",
             "errors",

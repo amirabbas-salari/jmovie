@@ -30,6 +30,10 @@ from .translator import contains_persian, translate_to_persian
 class AlreadyExists(Exception):
     """اثر با شناسه‌ی دیگری (IMDb) از قبل در سایت هست؛ خطا نیست، ردّ تکراری است."""
 
+
+class OutOfRange(Exception):
+    """تاریخ اکران اثر خارج از بازه‌ی انتخاب‌شده در تنظیمات است."""
+
 logger = logging.getLogger(__name__)
 
 # نگاشت منبع تنظیمات -> اندپوینت‌های TMDB برای فیلم و سریال
@@ -40,7 +44,8 @@ SOURCE_ENDPOINTS = {
     "top_rated": [("movie", "movie/top_rated"), ("tv", "tv/top_rated")],
 }
 
-MAX_PAGES_PER_SOURCE = 2
+MAX_PAGES_PER_SOURCE = 50
+MAX_CANDIDATES_EXAMINED = 5000
 MAX_CAST = 10
 
 
@@ -174,6 +179,9 @@ class ContentAgent:
                     continue
                 for result in data.get("results") or []:
                     if result.get("media_type") in ("movie", "tv") and result.get("id"):
+                        raw_date = result.get("release_date") or result.get("first_air_date")
+                        if raw_date and not self._release_in_range(raw_date):
+                            continue
                         resolved = {
                             "media_type": result["media_type"],
                             "tmdb_id": result["id"],
@@ -199,17 +207,49 @@ class ContentAgent:
         return candidates
 
     # ---------------- کشف ----------------
-    def discover(self, sources, limit, media_types=None):
-        """کاندیداها: [{media_type, tmdb_id, vote_average, vote_count}]"""
+    def _release_in_range(self, date_value):
+        """تاریخ اکران (رشته یا date) داخل بازه‌ی تنظیمات هست یا نه.
+
+        وقتی بازه‌ای تنظیم نشده همیشه True است؛ وقتی تنظیم شده، اثری که
+        تاریخ ندارد یا خارج از بازه است رد می‌شود.
+        """
+        start = getattr(self.config, "release_date_from", None)
+        end = getattr(self.config, "release_date_to", None)
+        if not start and not end:
+            return True
+        if not date_value:
+            return False
+        parsed = _parse_date(date_value) if isinstance(date_value, str) else date_value
+        if parsed is None:
+            return False
+        if start and parsed < start:
+            return False
+        if end and parsed > end:
+            return False
+        return True
+
+    def discover_iter(self, sources, media_types=None):
+        """کاندیداها را صفحه‌به‌صفحه و تنبل yield می‌کند.
+
+        قبلاً فقط ۲ صفحه از هر لیست خوانده می‌شد و برای سقف‌های بزرگ
+        (مثلاً ۱۰۰۰ فیلم) کاندیداها وسط راه تمام می‌شدند و بیشترشان هم
+        تکراری‌های صفحه‌ی اول بودند؛ حالا تا وقتی اجراکننده به سقفش
+        برسد، صفحه‌های عمیق‌تر خوانده می‌شوند.
+        """
         allowed = _normalize_media_types(
             media_types
             if media_types is not None
             else getattr(self.config, "media_types", None)
         )
-        seen = {}
+        seen = set()
+        examined = 0
         if "custom" in sources:
-            for candidate in self.discover_from_custom_source(limit, allowed):
-                seen[(candidate["media_type"], candidate["tmdb_id"])] = candidate
+            for candidate in self.discover_from_custom_source(500, allowed):
+                key = (candidate["media_type"], candidate["tmdb_id"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                yield candidate
         for source in sources:
             if source == "custom":
                 continue
@@ -222,7 +262,13 @@ class ContentAgent:
                     except Exception:
                         logger.warning("TMDB list failed: %s page %s", endpoint, page, exc_info=True)
                         break
-                    for item in data.get("results") or []:
+                    results = data.get("results") or []
+                    if not results:
+                        break
+                    for item in results:
+                        examined += 1
+                        if examined > MAX_CANDIDATES_EXAMINED:
+                            return
                         tmdb_id = item.get("id")
                         if not tmdb_id:
                             continue
@@ -233,15 +279,25 @@ class ContentAgent:
                             continue
                         if (item.get("vote_count") or 0) < self.config.min_votes:
                             continue
-                        seen[key] = {
+                        raw_date = item.get("release_date") or item.get("first_air_date")
+                        if not self._release_in_range(raw_date):
+                            continue
+                        seen.add(key)
+                        yield {
                             "media_type": media_type,
                             "tmdb_id": tmdb_id,
                             "vote_average": item.get("vote_average") or 0,
                             "vote_count": item.get("vote_count") or 0,
                         }
-                        if len(seen) >= limit:
-                            return list(seen.values())
-        return list(seen.values())
+
+    def discover(self, sources, limit, media_types=None):
+        """نسخه‌ی فهرستی discover_iter (برای سازگاری و تست‌ها)."""
+        out = []
+        for candidate in self.discover_iter(sources, media_types=media_types):
+            out.append(candidate)
+            if len(out) >= limit:
+                break
+        return out
 
     def _already_have(self, media_type, tmdb_id):
         model = Movie if media_type == "movie" else Series
@@ -424,6 +480,11 @@ class ContentAgent:
         release_date = _parse_date(fa.get("release_date"))
         first_air = _parse_date(fa.get("first_air_date"))
 
+        # بازه‌ی تاریخ اکران در خود ایمپورت هم چک می‌شود (برای کاندیداهایی
+        # که تاریخشان در مرحله‌ی کشف معلوم نبود، مثل منبع سفارشی با IMDb)
+        if not self._release_in_range(release_date if is_movie else first_air):
+            raise OutOfRange("تاریخ اکران خارج از بازه‌ی انتخاب‌شده در تنظیمات است.")
+
         with transaction.atomic():
             if is_movie:
                 media = Movie.objects.create(
@@ -507,20 +568,40 @@ class ContentAgent:
 
         # لینک‌های دانلود از سایت دوم — بیرون تراکنش (شبکه) و بدون اینکه
         # خرابی‌اش واردکردن اثر را از بین ببرد.
+        item.auto_removed = False
         download_enabled = bool(
             getattr(self.config, "fetch_downloads", True)
             and (getattr(self.config, "download_source_url", "") or "").strip()
         )
         if download_enabled:
+            summary = None
             try:
                 summary = self.fetch_downloads_for(media, media_type)
+            except Exception:
+                # خطای شبکه یعنی «نامشخص»؛ در این حالت اثر پیش‌نویس می‌ماند
+                # تا دستی بررسی شود و اشتباهاً حذف نمی‌شود.
+                logger.warning("download fetch failed for %s/%s", media_type, tmdb_id, exc_info=True)
+            if summary is not None:
                 if summary.get("found"):
+                    # لینک دانلود دارد: مستقیم در سایت منتشر می‌شود، بدون
+                    # نیاز به تأیید دستی.
+                    media.is_active = True
+                    media.save(update_fields=["is_active"])
+                    item.status = AgentImportedItem.STATUS_APPROVED
+                    item.save(update_fields=["status"])
                     logger.info(
-                        "downloads attached: %s/%s found=%s created=%s",
+                        "downloads attached & published: %s/%s found=%s created=%s",
                         media_type, tmdb_id, summary["found"], summary["created"],
                     )
-            except Exception:
-                logger.warning("download fetch failed for %s/%s", media_type, tmdb_id, exc_info=True)
+                else:
+                    # لینک دانلود ندارد: خود اثر حذف می‌شود و فقط سابقه‌اش
+                    # می‌ماند تا ایجنت دوباره سراغش نرود.
+                    media.delete()
+                    item.status = AgentImportedItem.STATUS_REJECTED
+                    item.object_id = None
+                    item.save(update_fields=["status", "object_id"])
+                    item.auto_removed = True
+                    logger.info("no downloads, auto-removed: %s/%s", media_type, tmdb_id)
         return item
 
     # ---------------- اجرای کامل ----------------
@@ -561,13 +642,13 @@ class ContentAgent:
         sources = run.sources or ["trending", "popular"]
         limit = max_items or self.config.max_items_per_run
         try:
-            candidates = self.discover(sources, limit * 3, media_types=media_types)  # حاشیه برای تکراری‌ها
-            run.found_count = len(candidates)
-            run.save(update_fields=["found_count"])
+            # کشف جریانی است: تا وقتی به سقف نرسیده‌ایم صفحه‌های عمیق‌تر
+            # TMDB خوانده می‌شوند، نه اینکه از اول فقط چند صفحه ببینیم.
             created = 0
-            for candidate in candidates:
+            for candidate in self.discover_iter(sources, media_types=media_types):
                 if created >= limit:
                     break
+                run.found_count += 1
                 media_type = _domain_media_type(candidate["media_type"])
                 tmdb_id = candidate["tmdb_id"]
                 if self._blacklisted(media_type, tmdb_id):
@@ -576,14 +657,19 @@ class ContentAgent:
                     run.existing_skipped += 1
                 else:
                     try:
-                        self.import_candidate(run, candidate)
-                        created += 1
-                        if media_type == "movie":
-                            run.created_movies += 1
+                        item = self.import_candidate(run, candidate)
+                        if getattr(item, "auto_removed", False):
+                            # بدون لینک دانلود بود و خودکار حذف شد؛ جزو
+                            # «ساخته‌شده‌ها» حساب نمی‌شود تا سقف پر نشود.
+                            run.auto_removed_count += 1
                         else:
-                            run.created_series += 1
-                    except AlreadyExists:
-                        # با IMDb از قبل داریم؛ خطا نیست
+                            created += 1
+                            if media_type == "movie":
+                                run.created_movies += 1
+                            else:
+                                run.created_series += 1
+                    except (AlreadyExists, OutOfRange):
+                        # از قبل داریم / خارج از بازه‌ی تاریخ؛ خطا نیست
                         run.existing_skipped += 1
                     except Exception as exc:  # هر اثر مستقل است؛ خطا جلوی بقیه را نمی‌گیرد
                         run.failed_count += 1

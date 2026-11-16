@@ -68,7 +68,7 @@ class AgentRunView(APIView):
                 )
         if max_items is not None:
             try:
-                max_items = max(1, min(int(max_items), 100))
+                max_items = max(1, min(int(max_items), 1000))
             except (TypeError, ValueError):
                 return Response(
                     {"max_items": "باید عدد باشد."},

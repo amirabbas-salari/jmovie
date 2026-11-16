@@ -49,6 +49,14 @@ class AgentSettings(models.Model):
         default=True,
         help_text="گرفتن خودکار لینک دانلود از سایت دوم هنگام آوردن هر اثر",
     )
+    # بازه‌ی تاریخ اکران: ایجنت فقط آثاری را پیدا می‌کند که تاریخ
+    # اکرانشان (فیلم: release_date، سریال: اولین پخش) در این بازه باشد.
+    release_date_from = models.DateField(
+        null=True, blank=True, help_text="شروع بازه‌ی تاریخ اکران (اختیاری)"
+    )
+    release_date_to = models.DateField(
+        null=True, blank=True, help_text="پایان بازه‌ی تاریخ اکران (اختیاری)"
+    )
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
@@ -108,6 +116,8 @@ class AgentRun(TimeStampedModel):
     blacklisted_skipped = models.PositiveIntegerField(default=0)
     created_movies = models.PositiveIntegerField(default=0)
     created_series = models.PositiveIntegerField(default=0)
+    # آثاری که چون لینک دانلود نداشتند خودکار حذف شدند (وقتی منبع دانلود فعال است)
+    auto_removed_count = models.PositiveIntegerField(default=0)
     failed_count = models.PositiveIntegerField(default=0)
     errors = models.JSONField(default=list, blank=True)
 
