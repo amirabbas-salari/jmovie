@@ -28,6 +28,7 @@ inflection==0.5.1
 jiter==0.17.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
+libsql==0.1.11
 multidict==6.7.1
 openai==3.16.2
 pillow==12.2.0
