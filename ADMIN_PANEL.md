@@ -47,6 +47,7 @@ python manage.py create_admin_roles      # ساخت ۳ نقش آماده (اخت
 * `SECRET_KEY` — کلید قبلی داخل گیت بود؛ حتماً عوض و از env ست شود.
 * `TMDB_API_KEY` — کلید قبلی هم داخل گیت بود؛ rotate شود.
 * `DATABASE_URL` — در صورت ست‌شدن، به‌جای sqlite از آن استفاده می‌شود.
+* `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` — در صورت ست‌شدن، دیتابیس اصلی Turso (libSQL) است و بر `DATABASE_URL`/sqlite اولویت دارد؛ توکن فقط در متغیر محیطی سرور بماند.
 * `VITE_API_BASE_URL` — آدرس بک‌اند برای فرانت production.
 
 ## تست‌ها

@@ -279,12 +279,26 @@ import dj_database_url
     #     }
     # }
 
-# دیتابیس: اگر DATABASE_URL ست شده باشد از همان استفاده می‌شود (Postgres و…)،
-# در غیر این صورت sqlite روی volume ریل‌وی (/data) و اگر آن مسیر نبود کنار پروژه.
+# دیتابیس: اولویت با Turso (libSQL) است؛ اگر TURSO_DATABASE_URL ست شده باشد
+# از بک‌اند libSQL استفاده می‌شود. بعد از آن DATABASE_URL (Postgres و…) و در
+# غیر این صورت sqlite روی volume ریل‌وی (/data) و اگر آن مسیر نبود کنار پروژه.
+# توکن Turso فقط از متغیر محیطی خوانده می‌شود و هرگز نباید در کد کامیت شود.
 import dj_database_url as _dj_database_url
 
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
 DATABASE_URL = os.getenv("DATABASE_URL")
-if DATABASE_URL:
+if TURSO_DATABASE_URL:
+    DATABASES = {
+        "default": {
+            "ENGINE": "core.db.backends.libsql",
+            "NAME": TURSO_DATABASE_URL,
+            "OPTIONS": {"auth_token": TURSO_AUTH_TOKEN},
+            "CONN_MAX_AGE": 60,
+            "CONN_HEALTH_CHECKS": True,
+        }
+    }
+elif DATABASE_URL:
     DATABASES = {
         "default": _dj_database_url.parse(
             DATABASE_URL, conn_max_age=600, conn_health_checks=True
