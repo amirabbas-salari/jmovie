@@ -702,3 +702,162 @@ class MediaTypeFilterTest(TestCase):
         # مقادیر نامعتبر از فهرست حذف می‌شوند
         res = client.patch("/agent/settings/", {"media_types": ["movie", "book"]}, format="json")
         self.assertEqual(res.data["media_types"], ["movie"])
+
+
+# ---------------------------------------------------------------------------
+# کشف عمیق (صفحه‌های بعدی TMDB)، انتشار/حذف خودکار بر اساس لینک دانلود،
+# بازه‌ی تاریخ اکران
+# ---------------------------------------------------------------------------
+from datetime import date as _date
+
+
+class FakeTMDBClientPaged(FakeTMDBClient):
+    PAGES = {1: [11, 12], 2: [13, 14], 3: [15, 16]}
+
+    def _get(self, endpoint, params=None):
+        if endpoint.startswith("trending/movie"):
+            page = (params or {}).get("page", 1)
+            ids = self.PAGES.get(page, [])
+            return {"results": [{"id": i, "vote_average": 9, "vote_count": 900} for i in ids]}
+        return {"results": []}
+
+    def movie_full_details(self, tmdb_id, language="fa-IR"):
+        data = dict(MOVIE_DETAILS)
+        data["id"] = tmdb_id
+        data["external_ids"] = {"imdb_id": f"tt{tmdb_id:07d}"}
+        if language == "en-US":
+            data["title"] = f"Movie {tmdb_id}"
+        return data
+
+
+class DeepDiscoveryTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = False
+        settings_obj.save()
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientPaged)
+    def test_run_pages_deeper_until_limit_filled(self):
+        for tmdb_id in (11, 12, 13, 14):
+            Movie.objects.create(
+                title=f"قدیمی {tmdb_id}", original_title="Old",
+                imdb_id=f"tt{tmdb_id:07d}", tmdb_id=tmdb_id, runtime=90,
+            )
+        run = ContentAgent().run(sources=["trending"], max_items=2)
+        # صفحه‌های ۱ و ۲ همه تکراری‌اند؛ سقف باید از صفحه‌ی ۳ پر شود
+        self.assertEqual(run.created_movies, 2)
+        self.assertEqual(Movie.objects.filter(tmdb_id__in=[15, 16]).count(), 2)
+        self.assertGreaterEqual(run.existing_skipped, 4)
+
+
+class FakeTMDBClientGate(FakeTMDBClient):
+    ITEMS = [
+        {"id": 901, "vote_average": 9, "vote_count": 900},
+        {"id": 902, "vote_average": 9, "vote_count": 900},
+    ]
+
+    def _get(self, endpoint, params=None):
+        if endpoint.startswith("trending/movie"):
+            return {"results": [dict(i) for i in self.ITEMS]}
+        return {"results": []}
+
+    def movie_full_details(self, tmdb_id, language="fa-IR"):
+        data = dict(MOVIE_DETAILS)
+        data["id"] = tmdb_id
+        data["external_ids"] = {"imdb_id": f"tt{tmdb_id:07d}"}
+        if language == "en-US":
+            data["title"] = f"Movie {tmdb_id}"
+        return data
+
+
+def _gate_fetch(_session, url):
+    if "tt0000901" in url:
+        return ('<html><body><a href="https://dl.example.com/movie/a/">Movie 901</a></body></html>', url)
+    if url.rstrip("/").endswith("/movie/a"):
+        return ('<html><body><a href="https://dl.example.com/files/a.1080p.mkv">دانلود 1080p</a></body></html>', url)
+    return ("<html><body>بدون نتیجه</body></html>", url)
+
+
+class PublishGateTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = True
+        settings_obj.download_source_url = "https://dl.example.com"
+        settings_obj.save()
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientGate)
+    @patch("content_agent.download_source.fetch_html", side_effect=_gate_fetch)
+    def test_publish_with_links_delete_without(self, _fetch):
+        run = ContentAgent().run(sources=["trending"], max_items=10)
+        self.assertEqual(run.created_movies, 1)
+        self.assertEqual(run.auto_removed_count, 1)
+
+        published = Movie.objects.get(tmdb_id=901)
+        self.assertTrue(published.is_active)
+        self.assertFalse(Movie.objects.filter(tmdb_id=902).exists())
+
+        items = {i.tmdb_id: i for i in AgentImportedItem.objects.all()}
+        self.assertEqual(items[901].status, AgentImportedItem.STATUS_APPROVED)
+        self.assertEqual(items[902].status, AgentImportedItem.STATUS_REJECTED)
+        self.assertIsNone(items[902].object_id)
+
+        # اثر حذف‌شده در اجراهای بعدی دوباره وارد نمی‌شود
+        run2 = ContentAgent().run(sources=["trending"], max_items=10)
+        self.assertEqual(run2.created_movies, 0)
+        self.assertGreaterEqual(run2.blacklisted_skipped, 1)
+
+
+class FakeTMDBClientDates(FakeTMDBClient):
+    DATES = {801: "2023-05-01", 802: "2024-05-01", 803: "2025-05-01"}
+
+    def _get(self, endpoint, params=None):
+        if endpoint.startswith("trending/movie"):
+            return {"results": [
+                {"id": i, "vote_average": 9, "vote_count": 900, "release_date": d}
+                for i, d in self.DATES.items()
+            ]}
+        return {"results": []}
+
+    def movie_full_details(self, tmdb_id, language="fa-IR"):
+        data = dict(MOVIE_DETAILS)
+        data["id"] = tmdb_id
+        data["external_ids"] = {"imdb_id": f"tt{tmdb_id:07d}"}
+        data["release_date"] = self.DATES[tmdb_id]
+        if language == "en-US":
+            data["title"] = f"Movie {tmdb_id}"
+        return data
+
+
+class ReleaseRangeTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = False
+        settings_obj.save()
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientDates)
+    def test_only_in_range_imported(self):
+        settings_obj = AgentSettings.load()
+        settings_obj.release_date_from = _date(2024, 1, 1)
+        settings_obj.release_date_to = _date(2024, 12, 31)
+        settings_obj.save()
+        run = ContentAgent().run(sources=["trending"], max_items=10)
+        self.assertEqual(run.created_movies, 1)
+        self.assertEqual({m.tmdb_id for m in Movie.objects.all()}, {802})
+
+        settings_obj.release_date_from = None
+        settings_obj.release_date_to = None
+        settings_obj.save()
+        run2 = ContentAgent().run(sources=["trending"], max_items=10)
+        self.assertEqual(run2.created_movies, 2)

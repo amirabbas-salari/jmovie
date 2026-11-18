@@ -70,7 +70,7 @@ export default function Agent() {
       const last = runs[0]
       if (last && last.status === "success") {
         setNotice(
-          `اجرا تمام شد: ${formatNumber(last.created_movies)} فیلم و ${formatNumber(last.created_series)} سریال جدید به پیش‌نویس‌ها اضافه شد (${formatNumber(last.existing_skipped + last.blacklisted_skipped)} تکراری رد شد، ${formatNumber(last.failed_count)} خطا).`
+          `اجرا تمام شد: ${formatNumber(last.created_movies)} فیلم و ${formatNumber(last.created_series)} سریال جدید اضافه شد (${formatNumber(last.existing_skipped + last.blacklisted_skipped)} تکراری رد شد، ${formatNumber(last.auto_removed_count || 0)} اثر بدون لینک دانلود حذف شد، ${formatNumber(last.failed_count)} خطا).`
         )
       } else if (last && last.status === "failed") {
         setError("اجرای ایجنت ناموفق بود؛ جزئیات در تاریخچه‌ی اجراها.")
@@ -189,7 +189,7 @@ export default function Agent() {
     <div>
       <PageHeader
         title="ایجنت محتوا"
-        subtitle="آوردن خودکار فیلم و سریال‌های جدید از TMDB به‌صورت پیش‌نویس؛ انتشار فقط با تأیید شما"
+        subtitle="آوردن خودکار فیلم و سریال‌های جدید از TMDB؛ وقتی سایت دانلود تنظیم شده باشد، اثر دارای لینک مستقیم منتشر و بدون لینک حذف می‌شود"
       />
 
       <ErrorBox message={error} />
@@ -208,9 +208,13 @@ export default function Agent() {
           <p className="mb-4 text-xs leading-6 text-zinc-400">
             ایجنت از TMDB آثار جدید و محبوبی را که در سایت ندارید پیدا می‌کند،
             اطلاعات کامل، پوستر، بازیگران و برای سریال‌ها فصل و قسمت‌ها را
-            می‌آورد؛ لینک‌های دانلود را هم از سایت دوم شما (در تنظیمات) برمی‌دارد
-            و همه را به‌صورت پیش‌نویس (مخفی) ذخیره می‌کند. اجرا در پس‌زمینه
-            انجام می‌شود و وضعیتش زنده همین‌جا دیده می‌شود. اجرای زمان‌بندی روزانه هم با دستور
+            می‌آورد؛ لینک‌های دانلود را هم از سایت دوم شما (در تنظیمات) برمی‌دارد.
+            اگر برای اثری لینک پیدا شود، همان‌جا مستقیم در سایت منتشر می‌شود و
+            اگر پیدا نشود، اثر حذف می‌شود و فقط سابقه‌اش می‌ماند تا دوباره
+            نیاید (اگر سایت دانلود تنظیم نشده باشد، همه‌چیز مثل قبل پیش‌نویس
+            می‌شود). برای رسیدن به سقف، صفحه‌های عمیق‌تر TMDB هم خوانده
+            می‌شوند. اجرا در پس‌زمینه انجام می‌شود و وضعیتش زنده همین‌جا دیده
+            می‌شود. اجرای زمان‌بندی روزانه هم با دستور
             <code dir="ltr" className="mx-1 rounded bg-black/40 px-1.5 py-0.5 text-[11px] text-rose-300">python manage.py run_content_agent</code>
             روی سرور فعال می‌شود.
           </p>
@@ -284,7 +288,7 @@ export default function Agent() {
                 <label className="text-xs text-zinc-400">
                   سقف هر اجرا
                   <input
-                    type="number" min="1" max="100"
+                    type="number" min="1" max="1000"
                     value={settings.max_items_per_run}
                     onChange={(e) => setSettings({ ...settings, max_items_per_run: Number(e.target.value) })}
                     className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-zinc-100"
@@ -318,6 +322,30 @@ export default function Agent() {
                   ترجمه با AI
                 </label>
               </div>
+              <p className="mb-2 mt-4 text-xs font-semibold text-zinc-300">بازه‌ی تاریخ اکران (اختیاری)</p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs text-zinc-400">
+                  از تاریخ
+                  <input
+                    type="date"
+                    dir="ltr"
+                    value={settings.release_date_from || ""}
+                    onChange={(e) => setSettings({ ...settings, release_date_from: e.target.value || null })}
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-left text-sm text-zinc-100"
+                  />
+                </label>
+                <label className="text-xs text-zinc-400">
+                  تا تاریخ
+                  <input
+                    type="date"
+                    dir="ltr"
+                    value={settings.release_date_to || ""}
+                    onChange={(e) => setSettings({ ...settings, release_date_to: e.target.value || null })}
+                    className="mt-1.5 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-left text-sm text-zinc-100"
+                  />
+                </label>
+              </div>
+              <p className="mt-1.5 text-[11px] leading-5 text-zinc-500">فقط آثاری پیدا می‌شوند که تاریخ اکرانشان در این بازه باشد؛ خالی یعنی بدون محدودیت تاریخ.</p>
               <label className="mt-4 block text-xs text-zinc-400">
                 آدرس منبع کشف سفارشی (sitemap یا RSS سایت شما)
                 <input
@@ -447,15 +475,19 @@ export default function Agent() {
                     </span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => fetchDownloads(item)}
-                  disabled={!canRun || fetchingId === item.id}
-                  className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-sky-500/10 py-2 text-xs font-bold text-sky-300 ring-1 ring-sky-500/25 transition hover:bg-sky-500/20 disabled:opacity-40"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  {fetchingId === item.id ? "در حال گرفتن لینک..." : item.downloads_count ? "تلاش دوباره‌ی لینک دانلود" : "گرفتن لینک دانلود"}
-                </button>
+                {item.object_id ? (
+                  <button
+                    type="button"
+                    onClick={() => fetchDownloads(item)}
+                    disabled={!canRun || fetchingId === item.id}
+                    className="mt-2 flex w-full items-center justify-center gap-1 rounded-xl bg-sky-500/10 py-2 text-xs font-bold text-sky-300 ring-1 ring-sky-500/25 transition hover:bg-sky-500/20 disabled:opacity-40"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    {fetchingId === item.id ? "در حال گرفتن لینک..." : item.downloads_count ? "تلاش دوباره‌ی لینک دانلود" : "گرفتن لینک دانلود"}
+                  </button>
+                ) : (
+                  <p className="mt-2 rounded-xl bg-white/[0.03] py-2 text-center text-[11px] text-zinc-500">بدون لینک دانلود — خودکار حذف شد</p>
+                )}
                 {tab === "pending" ? (
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => act(item.id, "approve")} disabled={!canRun} className="flex items-center justify-center gap-1 rounded-xl bg-emerald-500/15 py-2 text-xs font-bold text-emerald-300 ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/25 disabled:opacity-40">
@@ -489,7 +521,7 @@ export default function Agent() {
         <p className="text-sm text-zinc-500">هنوز اجرایی ثبت نشده است.</p>
       ) : (
         <div className="overflow-x-auto rounded-3xl border border-white/10">
-          <table className="w-full min-w-[640px] text-right text-xs">
+          <table className="w-full min-w-[720px] text-right text-xs">
             <thead className="bg-white/[0.04] text-zinc-400">
               <tr>
                 <th className="px-4 py-3 font-semibold">#</th>
@@ -499,6 +531,7 @@ export default function Agent() {
                 <th className="px-4 py-3 font-semibold">فیلم +</th>
                 <th className="px-4 py-3 font-semibold">سریال +</th>
                 <th className="px-4 py-3 font-semibold">تکراری</th>
+                <th className="px-4 py-3 font-semibold">حذف بی‌لینک</th>
                 <th className="px-4 py-3 font-semibold">خطا</th>
                 <th className="px-4 py-3 font-semibold">زمان</th>
               </tr>
@@ -513,6 +546,7 @@ export default function Agent() {
                   <td className="px-4 py-2.5">{formatNumber(run.created_movies)}</td>
                   <td className="px-4 py-2.5">{formatNumber(run.created_series)}</td>
                   <td className="px-4 py-2.5">{formatNumber(run.existing_skipped + run.blacklisted_skipped)}</td>
+                  <td className="px-4 py-2.5">{formatNumber(run.auto_removed_count || 0)}</td>
                   <td className="px-4 py-2.5">{formatNumber(run.failed_count)}</td>
                   <td className="px-4 py-2.5">{run.started_at ? new Date(run.started_at).toLocaleString("fa-IR") : "—"}</td>
                 </tr>
