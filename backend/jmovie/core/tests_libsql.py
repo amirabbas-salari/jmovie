@@ -142,6 +142,50 @@ class LibsqlBackendTests(SimpleTestCase):
             count = cursor.execute("SELECT COUNT(*) FROM sample").fetchone()[0]
         self.assertEqual(count, 0)
 
+    def test_constraint_checking_toggle_never_blocks_schema_editor(self):
+        # روی سرور Turso پراگمای foreign_keys نادیده گرفته می‌شود و مقدارش
+        # همیشه ۱ می‌ماند؛ با این حال disable باید «موفق» گزارش شود تا
+        # اسکیماادیتور جنگو مهاجرت‌ها را با NotSupportedError متوقف نکند.
+        self.assertTrue(self.wrapper.disable_constraint_checking())
+        self.wrapper.enable_constraint_checking()
+        self.wrapper.check_constraints()
+
+    def test_schema_editor_survives_ignored_foreign_keys_pragma(self):
+        # شبیه‌سازی رفتار سرور Turso: دستور PRAGMA foreign_keys = OFF
+        # نادیده گرفته می‌شود و مقدار پراگما ۱ می‌ماند؛ اسکیماادیتور نباید
+        # با NotSupportedError متوقف شود (باگ دیده‌شده در لاگ Railway).
+        from unittest import mock
+
+        from core.db.backends.libsql.base import LibsqlCursorWrapper
+
+        original_execute = LibsqlCursorWrapper.execute
+
+        def ignoring_execute(cursor_self, query, params=None):
+            if (
+                isinstance(query, str)
+                and query.strip().upper() == "PRAGMA FOREIGN_KEYS = OFF"
+            ):
+                return cursor_self
+            return original_execute(cursor_self, query, params)
+
+        with mock.patch.object(LibsqlCursorWrapper, "execute", ignoring_execute):
+            self.assertTrue(self.wrapper.disable_constraint_checking())
+            with self.wrapper.schema_editor(atomic=False) as editor:
+                editor.execute(
+                    "CREATE TABLE made_despite_fk (id INTEGER PRIMARY KEY)"
+                )
+
+    def test_schema_editor_can_enter_and_execute(self):
+        with self.wrapper.schema_editor(atomic=False) as editor:
+            editor.execute(
+                "CREATE TABLE made_by_editor (id INTEGER PRIMARY KEY, v TEXT)"
+            )
+        with self.wrapper.cursor() as cursor:
+            row = cursor.execute(
+                "SELECT name FROM sqlite_master WHERE name = 'made_by_editor'"
+            ).fetchone()
+        self.assertIsNotNone(row)
+
     def test_file_database_persists_between_connections(self):
         fd, path = tempfile.mkstemp(suffix=".sqlite3")
         os.close(fd)

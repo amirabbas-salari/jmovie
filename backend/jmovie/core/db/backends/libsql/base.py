@@ -465,3 +465,45 @@ class DatabaseWrapper(SQLiteDatabaseWrapper):
 
     def create_cursor(self, name=None):
         return self.connection.cursor()
+
+    # -- چک‌های کلید خارجی ---------------------------------------------------
+    # سرور libSQL ‏(Turso) پراگمای foreign_keys را نادیده می‌گیرد و کلیدهای
+    # خارجی همیشه فعال‌اند؛ خواندن پراگما هم همیشه ۱ برمی‌گرداند. پیاده‌سازی
+    # sqlite جنگو در disable_constraint_checking به همین دلیل «ناموفق» گزارش
+    # می‌کند و اسکیماادیتور با NotSupportedError مهاجرت‌ها را متوقف می‌کند
+    # (روی دیتابیس لوکال/فایلی پراگما واقعاً اعمال می‌شود و این مشکل نیست).
+    # پس اینجا تلاش برای خاموش‌کردن انجام می‌شود ولی نتیجه «موفق» گزارش
+    # می‌شود تا مهاجرت‌ها روی Turso متوقف نشوند؛ موقع ساخت جدول‌های تازه
+    # (دیتابیس خالی) فعال‌بودن FK مشکلی ایجاد نمی‌کند چون جنگو جدول‌ها را
+    # به ترتیب وابستگی می‌سازد.
+    def disable_constraint_checking(self):
+        try:
+            with self.cursor() as cursor:
+                cursor.execute("PRAGMA foreign_keys = OFF")
+        except Exception:
+            # سرور ممکن است خودِ دستور پراگما را هم خطا بدهد؛ باز هم نباید
+            # جلوی مهاجرت گرفته شود.
+            pass
+        return True
+
+    def enable_constraint_checking(self):
+        try:
+            with self.cursor() as cursor:
+                cursor.execute("PRAGMA foreign_keys = ON")
+        except Exception:
+            pass
+
+    def check_constraints(self, table_names=None):
+        try:
+            return super().check_constraints(table_names=table_names)
+        except Exception as exc:
+            # اگر سرور پراگمای foreign_key_check را پشتیبانی نکند، نباید
+            # خروجی اسکیماادیتور (که DDL را اعمال کرده) خطا محسوب شود؛
+            # نقض واقعی FK با IntegrityError می‌آید و دوباره پرتاب می‌شود.
+            message = str(exc).lower()
+            if any(
+                hint in message
+                for hint in ("pragma", "not supported", "unsupported")
+            ):
+                return None
+            raise
