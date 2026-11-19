@@ -194,6 +194,75 @@ class LibsqlBackendTests(SimpleTestCase):
         self.assertIsNone(remote.check_constraints())
         self.assertIsNone(remote.connection)
 
+    def test_dump_sqlite_sql_command_outputs_schema_and_data(self):
+        import io
+        import sqlite3
+
+        from django.core.management import call_command
+
+        fd, path = tempfile.mkstemp(suffix=".sqlite3")
+        os.close(fd)
+        try:
+            conn = sqlite3.connect(path)
+            conn.execute(
+                "CREATE TABLE accounts_user ("
+                "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, username varchar(150) NOT NULL UNIQUE)"
+            )
+            conn.execute(
+                "INSERT INTO accounts_user (username) VALUES ('کاربر۱')"
+            )
+            conn.commit()
+            conn.close()
+
+            out = io.StringIO()
+            call_command("dump_sqlite_sql", path=path, stdout=out)
+            dump = out.getvalue()
+            self.assertIn("PRIMARY KEY AUTOINCREMENT", dump)
+            self.assertIn("کاربر۱", dump)
+            self.assertIn("PRAGMA defer_foreign_keys = ON;", dump)
+        finally:
+            os.remove(path)
+
+    def test_dump_sqlite_sql_importable_with_foreign_keys_on(self):
+        # روی Turso FK همیشه روشن است؛ خروجی دستور باید با FK روشن هم
+        # کامل ایمپورت شود، حتی وقتی ترتیب فیزیکی ساخت جدول‌ها طوری است
+        # که داده‌ی جدول فرزند قبل از جدول والد می‌آید (مشکل دامپ خام).
+        import io
+        import sqlite3
+
+        from django.core.management import call_command
+
+        fd, path = tempfile.mkstemp(suffix=".sqlite3")
+        os.close(fd)
+        try:
+            conn = sqlite3.connect(path)
+            conn.execute(
+                "CREATE TABLE child ("
+                "id INTEGER NOT NULL PRIMARY KEY, "
+                "parent_id INTEGER REFERENCES parent (id))"
+            )
+            conn.execute("CREATE TABLE parent (id INTEGER NOT NULL PRIMARY KEY)")
+            conn.execute("INSERT INTO parent (id) VALUES (1)")
+            conn.execute("INSERT INTO child (id, parent_id) VALUES (1, 1)")
+            conn.commit()
+            conn.close()
+
+            out = io.StringIO()
+            call_command("dump_sqlite_sql", path=path, stdout=out)
+            dump = out.getvalue()
+        finally:
+            os.remove(path)
+
+        target = sqlite3.connect(":memory:")
+        target.execute("PRAGMA foreign_keys = ON")
+        target.executescript(dump)
+        self.assertEqual(
+            target.execute("SELECT COUNT(*) FROM child").fetchone()[0], 1
+        )
+        self.assertEqual(
+            target.execute("PRAGMA foreign_key_check").fetchall(), []
+        )
+
     def test_file_database_persists_between_connections(self):
         fd, path = tempfile.mkstemp(suffix=".sqlite3")
         os.close(fd)
