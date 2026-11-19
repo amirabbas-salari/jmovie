@@ -493,7 +493,24 @@ class DatabaseWrapper(SQLiteDatabaseWrapper):
         except Exception:
             pass
 
+    def _is_remote_database(self):
+        """آیا NAME یک آدرس ریموت Turso است (نه فایل لوکال/replica)؟"""
+        name = str(self.settings_dict.get("NAME") or "")
+        return name.startswith(
+            ("libsql://", "https://", "http://", "wss://", "ws://")
+        )
+
     def check_constraints(self, table_names=None):
+        if self._is_remote_database():
+            # روی سرور Turso این چک پایانی لازم نیست و مضر هم هست:
+            # - FKها روی سرور همیشه فعال‌اند و هر نقضی همان لحظه‌ی اجرای
+            #   دستور خطا می‌دهد؛ چیزی برای چک‌کردنِ بعداً نمی‌ماند.
+            # - ‏PRAGMA foreign_key_check وقتی جدول والد در لحظه‌ی چک در
+            #   دیتابیس نیست (مثلاً رکورد مهاجرتش هست ولی جدولش با انتقال
+            #   داده نیامده) روی سرور خطای «foreign key mismatch» می‌دهد و
+            #   کل مهاجرتِ اعمال‌شده را برمی‌گرداند؛ روی sqlite لوکال همین
+            #   وضعیت بدون خطا رد می‌شود.
+            return None
         try:
             return super().check_constraints(table_names=table_names)
         except Exception as exc:
