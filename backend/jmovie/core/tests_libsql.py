@@ -186,6 +186,14 @@ class LibsqlBackendTests(SimpleTestCase):
             ).fetchone()
         self.assertIsNotNone(row)
 
+    def test_check_constraints_skipped_for_remote_without_connecting(self):
+        # روی Turso چک پایانی foreign_key_check لازم نیست و وقتی جدول والد
+        # در لحظه‌ی چک نباشد خطای «foreign key mismatch» می‌دهد؛ برای آدرس
+        # ریموت باید بدون هیچ تلاشی برای اتصال، رد شود.
+        remote = _make_wrapper("libsql://demo-db.turso.io")
+        self.assertIsNone(remote.check_constraints())
+        self.assertIsNone(remote.connection)
+
     def test_file_database_persists_between_connections(self):
         fd, path = tempfile.mkstemp(suffix=".sqlite3")
         os.close(fd)
