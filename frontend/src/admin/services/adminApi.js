@@ -87,7 +87,11 @@ export const peopleApi = crud("/admin/people/")
 export const genresApi = crud("/admin/genres/")
 export const collectionsApi = crud("/admin/collections/")
 export const collectionItemsApi = crud("/admin/collection-items/")
-export const downloadsApi = crud("/admin/downloads/")
+export const downloadsApi = {
+  ...crud("/admin/downloads/"),
+  // حذف همه‌ی ردیف‌هایی که دقیقاً یک آدرس مشخص دارند (مثلاً لینک خراب/تکراری)
+  deleteByUrl: async (url) => (await api.post("/admin/downloads/delete-by-url/", { url })).data,
+}
 export const commentsApi = {
   ...crud("/admin/comments/"),
   approve: async (id) => (await api.post(`/admin/comments/${id}/approve/`)).data,

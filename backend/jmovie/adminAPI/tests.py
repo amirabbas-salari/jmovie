@@ -706,3 +706,111 @@ class AdminEpisodeDownloadCrudTest(TestCase):
 
         self.assertTrue(Episode.objects.filter(id=self.episode.id).exists())
         self.assertTrue(Series.objects.filter(id=self.series.id).exists())
+
+
+class AdminDownloadToolsTest(TestCase):
+    """فیلتر VIP و «حذف لینک با آدرس» در پنل دانلودها."""
+
+    SHARED_URL = "https://dl.example.com/shared-file.mkv"
+
+    def setUp(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+        from series.models import Episode, Season, Series
+
+        self.client = APIClient()
+        self.superadmin = make_user("dltools", is_staff=True, is_superuser=True)
+        self.client.force_authenticate(user=self.superadmin)
+
+        self.movie = Movie.objects.create(title="فیلم ابزار", imdb_id="tt3000001", runtime=95)
+        series = Series.objects.create(title="سریال ابزار", imdb_id="tt3000002")
+        season = Season.objects.create(series=series, season_number=1)
+        self.episode = Episode.objects.create(season=season, episode_number=3)
+        movie_ct = ContentType.objects.get_for_model(Movie)
+        ep_ct = ContentType.objects.get_for_model(Episode)
+        self.vip_download = Download.objects.create(
+            content_type=movie_ct, object_id=self.movie.id,
+            quality="1080p", url="https://dl.example.com/vip.mkv", is_vip=True,
+        )
+        self.normal_download = Download.objects.create(
+            content_type=ep_ct, object_id=self.episode.id,
+            quality="720p", url="https://dl.example.com/normal.mkv", is_vip=False,
+        )
+        # یک آدرس یکسان روی دو هدف متفاوت
+        Download.objects.create(
+            content_type=movie_ct, object_id=self.movie.id,
+            quality="720p", url=self.SHARED_URL,
+        )
+        Download.objects.create(
+            content_type=ep_ct, object_id=self.episode.id,
+            quality="720p", url=self.SHARED_URL,
+        )
+
+    def _results(self, res):
+        return res.data["results"] if "results" in res.data else res.data
+
+    def test_is_vip_filter(self):
+        from downloads.models import Download
+
+        res = self.client.get("/admin/downloads/", {"is_vip": "true"})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([d["id"] for d in self._results(res)], [self.vip_download.id])
+        res = self.client.get("/admin/downloads/", {"is_vip": "false"})
+        self.assertEqual(
+            {d["id"] for d in self._results(res)},
+            {self.normal_download.id}
+            | set(Download.objects.filter(url=self.SHARED_URL).values_list("id", flat=True)),
+        )
+
+    def test_url_exact_filter(self):
+        res = self.client.get("/admin/downloads/", {"url": self.SHARED_URL})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(self._results(res)), 2)
+        # تطبیق دقیق است؛ زیررشته نباید چیزی برگرداند
+        res = self.client.get("/admin/downloads/", {"url": "shared-file"})
+        self.assertEqual(len(self._results(res)), 0)
+
+    def test_delete_by_url_removes_all_matches(self):
+        from adminAPI.models import AdminAuditLog
+        from downloads.models import Download
+
+        res = self.client.post("/admin/downloads/delete-by-url/", {"url": self.SHARED_URL}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["deleted"], 2)
+        self.assertFalse(Download.objects.filter(url=self.SHARED_URL).exists())
+        # بقیه‌ی لینک‌ها دست‌نخورده می‌مانند
+        self.assertTrue(Download.objects.filter(id=self.vip_download.id).exists())
+        self.assertTrue(Download.objects.filter(id=self.normal_download.id).exists())
+        self.assertEqual(
+            AdminAuditLog.objects.filter(
+                action=AdminAuditLog.ACTION_DELETE, model_label="downloads.download"
+            ).count(),
+            2,
+        )
+
+    def test_delete_by_url_no_match_and_validation(self):
+        from downloads.models import Download
+
+        res = self.client.post(
+            "/admin/downloads/delete-by-url/",
+            {"url": "https://dl.example.com/none.mkv"}, format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["deleted"], 0)
+        res = self.client.post("/admin/downloads/delete-by-url/", {}, format="json")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(Download.objects.count(), 4)
+
+    def test_delete_by_url_requires_delete_permission(self):
+        viewer = make_user("dlviewer", is_staff=True)
+        role = Group.objects.create(name="مشاهده دانلود")
+        role.permissions.set(Permission.objects.filter(codename__in=["view_download"]))
+        viewer.groups.add(role)
+        self.client.force_authenticate(user=viewer)
+        self.assertEqual(self.client.get("/admin/downloads/", {"is_vip": "true"}).status_code, 200)
+        res = self.client.post("/admin/downloads/delete-by-url/", {"url": self.SHARED_URL}, format="json")
+        self.assertEqual(res.status_code, 403)
+        from downloads.models import Download
+
+        self.assertEqual(Download.objects.filter(url=self.SHARED_URL).count(), 2)

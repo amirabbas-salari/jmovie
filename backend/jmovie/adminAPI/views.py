@@ -759,6 +759,9 @@ class AdminDownloadViewSet(AdminModelViewSet):
     serializer_class = AdminDownloadSerializer
     search_fields = ["title", "quality", "language", "url"]
     ordering_fields = ["id", "created_at", "quality"]
+    extra_action_permissions = {
+        "delete_by_url": "downloads.delete_download",
+    }
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -775,7 +778,34 @@ class AdminDownloadViewSet(AdminModelViewSet):
         is_active = self.request.query_params.get("is_active")
         if is_active in ("true", "false"):
             qs = qs.filter(is_active=is_active == "true")
+        is_vip = self.request.query_params.get("is_vip")
+        if is_vip in ("true", "false"):
+            qs = qs.filter(is_vip=is_vip == "true")
+        # تطبیق دقیق آدرس؛ برای «حذف لینک با آدرس» تا ادمین قبل از حذف
+        # ببیند دقیقاً چه ردیف‌هایی با آن آدرس ثبت شده‌اند.
+        url = (self.request.query_params.get("url") or "").strip()
+        if url:
+            qs = qs.filter(url=url)
         return qs
+
+    @action(detail=False, methods=["post"], url_path="delete-by-url")
+    def delete_by_url(self, request):
+        """همه‌ی لینک‌هایی که دقیقاً همین آدرس را دارند حذف می‌کند.
+
+        یک آدرس ممکن است روی چند هدف (فیلم/قسمت و...) ثبت شده باشد؛
+        تعداد حذف‌شده برگردانده می‌شود و برای هر ردیف لاگ حذف ثبت می‌شود.
+        """
+        url = (request.data.get("url") or "").strip()
+        if not url:
+            return Response(
+                {"url": "آدرس لینک (url) لازم است."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        matches = list(Download.objects.filter(url=url).order_by("id"))
+        for instance in matches:
+            self._log(request, AdminAuditLog.ACTION_DELETE, instance)
+        Download.objects.filter(id__in=[m.id for m in matches]).delete()
+        return Response({"deleted": len(matches), "url": url})
 
 
 class AdminCommentViewSet(AdminModelViewSet):

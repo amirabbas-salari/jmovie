@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { Pencil, Trash2 } from "lucide-react"
-import { downloadsApi, episodesApi, moviesApi, seriesApi } from "../services/adminApi"
+import { downloadsApi, episodesApi, moviesApi, seriesApi, getApiError } from "../services/adminApi"
 import { useAdmin } from "../context/AdminContext"
 import { P } from "../permissions"
 import { Badge, ConfirmModal, EmptyState, ErrorBox, Field, Modal, Pagination, PrimaryBtn, SearchBox, Spinner, GhostBtn, inputCls, useAdminList, useDebounced } from "../components/ui"
@@ -12,14 +12,20 @@ const emptyForm = { target_type: "movie", object_id: "", title: "", quality: "10
 export default function Downloads() {
   const { can } = useAdmin()
   const [typeFilter, setTypeFilter] = useState("")
+  const [vipFilter, setVipFilter] = useState("")
   const list = useAdminList(
-    (params) => downloadsApi.list({ ...params, ...(typeFilter ? { target_type: typeFilter } : {}) }),
-    [typeFilter]
+    (params) => downloadsApi.list({
+      ...params,
+      ...(typeFilter ? { target_type: typeFilter } : {}),
+      ...(vipFilter ? { is_vip: vipFilter } : {}),
+    }),
+    [typeFilter, vipFilter]
   )
   const [form, setForm] = useState(null)
   const [saving, setSaving] = useState(false)
   const [toDelete, setToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
+  const [urlToolOpen, setUrlToolOpen] = useState(false)
 
   const save = async () => {
     setSaving(true)
@@ -48,11 +54,16 @@ export default function Downloads() {
           <h1 className="text-xl font-bold text-zinc-50 sm:text-2xl">لینک‌های دانلود</h1>
           <p className="mt-1 text-sm text-zinc-500">همه‌ی لینک‌های فیلم، سریال و قسمت‌ها در یک جا</p>
         </div>
-        {can(P.downloadAdd) && (
-          <span className="ms-auto">
+        <span className="ms-auto flex flex-wrap gap-2">
+          {can(P.downloadDelete) && (
+            <GhostBtn onClick={() => setUrlToolOpen(true)}>
+              <Trash2 className="h-4 w-4" /> حذف لینک با آدرس
+            </GhostBtn>
+          )}
+          {can(P.downloadAdd) && (
             <PrimaryBtn onClick={() => setForm({ ...emptyForm })}>افزودن لینک</PrimaryBtn>
-          </span>
-        )}
+          )}
+        </span>
       </div>
 
       <div className="mb-5 flex flex-wrap gap-3">
@@ -62,6 +73,11 @@ export default function Downloads() {
           <option value="movie">فیلم‌ها</option>
           <option value="series">سریال‌ها</option>
           <option value="episode">قسمت‌ها</option>
+        </select>
+        <select value={vipFilter} onChange={(e) => setVipFilter(e.target.value)} className="w-36 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none focus:border-red-500/40">
+          <option value="">VIP و عادی</option>
+          <option value="true">فقط VIP</option>
+          <option value="false">فقط عادی</option>
         </select>
       </div>
 
@@ -126,7 +142,114 @@ export default function Downloads() {
       {toDelete && (
         <ConfirmModal title="حذف لینک" message={`لینک «${toDelete.quality}» برای «${toDelete.target_title}» حذف شود؟`} loading={deleting} onCancel={() => setToDelete(null)} onConfirm={confirmDelete} />
       )}
+      {urlToolOpen && (
+        <DeleteByUrlModal onClose={() => setUrlToolOpen(false)} onDeleted={() => list.reload()} />
+      )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// حذف لینک با آدرس: آدرس کامل وارد می‌شود، ردیف‌های دارای همان آدرس
+// پیش‌نمایش داده می‌شوند و بعد از تأیید همه با هم حذف می‌شوند.
+// ---------------------------------------------------------------------------
+function DeleteByUrlModal({ onClose, onDeleted }) {
+  const [url, setUrl] = useState("")
+  const [matches, setMatches] = useState(null) // null = هنوز جستجو نشده
+  const [searching, setSearching] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState("")
+  const [doneMsg, setDoneMsg] = useState("")
+
+  const find = async () => {
+    const target = url.trim()
+    if (!target) return
+    setSearching(true); setError(""); setDoneMsg("")
+    try {
+      const d = await downloadsApi.list({ url: target, page_size: 100 })
+      setMatches(d.items)
+    } catch (err) {
+      setError(getApiError(err, "جستجوی لینک با خطا مواجه شد."))
+      setMatches(null)
+    } finally { setSearching(false) }
+  }
+
+  const doDelete = async () => {
+    setDeleting(true); setError("")
+    try {
+      const res = await downloadsApi.deleteByUrl(url.trim())
+      setConfirming(false)
+      setMatches(null)
+      setDoneMsg(`${res.deleted} لینک با این آدرس حذف شد.`)
+      onDeleted?.()
+    } catch (err) {
+      setError(getApiError(err, "حذف لینک با خطا مواجه شد."))
+      setConfirming(false)
+    } finally { setDeleting(false) }
+  }
+
+  return (
+    <>
+      <Modal title="حذف لینک با آدرس" onClose={onClose} wide>
+        <div className="space-y-4">
+          <Field label="آدرس کامل لینک دانلود">
+            <input
+              value={url} dir="ltr" autoFocus
+              onChange={(e) => { setUrl(e.target.value); setMatches(null); setDoneMsg("") }}
+              onKeyDown={(e) => { if (e.key === "Enter") find() }}
+              className={inputCls} placeholder="https://..."
+            />
+          </Field>
+          <p className="-mt-2 text-[11px] leading-5 text-zinc-500">
+            تطبیق دقیق است: فقط ردیف‌هایی حذف می‌شوند که دقیقاً همین آدرس را دارند؛ اگر یک آدرس روی چند فیلم/قسمت ثبت شده باشد، همه نمایش داده می‌شوند.
+          </p>
+          {error && <ErrorBox message={error} />}
+          {doneMsg && (
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{doneMsg}</div>
+          )}
+          {matches !== null && !doneMsg && (
+            matches.length === 0
+              ? <p className="text-sm text-zinc-400">لینکی با این آدرس پیدا نشد.</p>
+              : (
+                <div className="space-y-3">
+                  <p className="text-sm text-zinc-300">{matches.length} ردیف با این آدرس پیدا شد:</p>
+                  <ul className="max-h-64 space-y-2 overflow-y-auto">
+                    {matches.map((d) => (
+                      <li key={d.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3.5 py-2.5">
+                        <Badge tone="red">{d.quality}</Badge>
+                        <span className="text-sm text-zinc-200">{d.target_title}</span>
+                        <span className="text-[11px] text-zinc-500">{TYPE_LABELS[d.target_type] || d.target_type}</span>
+                        {d.is_vip && <Badge tone="amber">VIP</Badge>}
+                        <span className="w-full truncate text-[11px] text-zinc-500" dir="ltr">{d.url}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" onClick={() => setConfirming(true)} disabled={deleting}
+                    className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-50">
+                    <Trash2 className="h-4 w-4" /> حذف همه‌ی این {matches.length} لینک
+                  </button>
+                </div>
+              )
+          )}
+          <div className="flex gap-2 pt-1">
+            <PrimaryBtn onClick={find} disabled={searching || !url.trim()}>
+              {searching && <Loader2 className="h-4 w-4 animate-spin" />} یافتن لینک
+            </PrimaryBtn>
+            <GhostBtn onClick={onClose}>بستن</GhostBtn>
+          </div>
+        </div>
+      </Modal>
+      {confirming && (
+        <ConfirmModal
+          title="حذف لینک‌ها با این آدرس"
+          message={`هر ${matches?.length ?? 0} ردیفی که دقیقاً این آدرس را دارد حذف شود؟ این کار قابل بازگشت نیست.`}
+          loading={deleting}
+          onCancel={() => setConfirming(false)}
+          onConfirm={doDelete}
+        />
+      )}
+    </>
   )
 }
 
