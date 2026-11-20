@@ -11,6 +11,7 @@
   python manage.py run_content_agent
 """
 import logging
+import re
 
 from django.db import transaction
 from django.utils import timezone
@@ -33,6 +34,30 @@ class AlreadyExists(Exception):
 
 class OutOfRange(Exception):
     """تاریخ اکران اثر خارج از بازه‌ی انتخاب‌شده در تنظیمات است."""
+
+
+class ImdbNotFound(Exception):
+    """برای این IMDb ID در TMDB اثری (فیلم/سریال) پیدا نشد."""
+
+
+class AmbiguousImdb(Exception):
+    """IMDb هم به فیلم می‌رسد هم سریال؛ نوع اثر باید دستی مشخص شود."""
+
+
+_IMDB_ID_RE = re.compile(r"^tt\d{7,10}$")
+
+
+def normalize_imdb_id(value):
+    """IMDb ID را به قالب «tt1234567» می‌رساند؛ ورودی نامعتبر ValueError.
+
+    عدد خالی (بدون tt) هم پذیرفته می‌شود تا کپی از نوار آدرس راحت باشد.
+    """
+    text = (value or "").strip().lower()
+    if text.isdigit():
+        text = f"tt{text}"
+    if not _IMDB_ID_RE.match(text):
+        raise ValueError("شناسه‌ی IMDb معتبر نیست؛ مثالی درست: tt0903747")
+    return text
 
 logger = logging.getLogger(__name__)
 
@@ -439,7 +464,7 @@ class ContentAgent:
         )
 
     # ---------------- وارد کردن یک اثر ----------------
-    def import_candidate(self, run, candidate):
+    def import_candidate(self, run, candidate, manual=False):
         # نوع دامنه («series») ذخیره می‌شود، نه نوع TMDB («tv»)
         media_type = _domain_media_type(candidate["media_type"])
         tmdb_id = candidate["tmdb_id"]
@@ -481,8 +506,10 @@ class ContentAgent:
         first_air = _parse_date(fa.get("first_air_date"))
 
         # بازه‌ی تاریخ اکران در خود ایمپورت هم چک می‌شود (برای کاندیداهایی
-        # که تاریخشان در مرحله‌ی کشف معلوم نبود، مثل منبع سفارشی با IMDb)
-        if not self._release_in_range(release_date if is_movie else first_air):
+        # که تاریخشان در مرحله‌ی کشف معلوم نبود، مثل منبع سفارشی با IMDb)؛
+        # افزودن دستی ادمین با IMDb از این بازه مستثناست، چون خودش مشخصاً
+        # همین اثر را خواسته است.
+        if not manual and not self._release_in_range(release_date if is_movie else first_air):
             raise OutOfRange("تاریخ اکران خارج از بازه‌ی انتخاب‌شده در تنظیمات است.")
 
         with transaction.atomic():
@@ -593,6 +620,14 @@ class ContentAgent:
                         "downloads attached & published: %s/%s found=%s created=%s",
                         media_type, tmdb_id, summary["found"], summary["created"],
                     )
+                elif manual:
+                    # افزودن دستی ادمین با IMDb: اثر مشخصاً خواسته شده، پس
+                    # بی‌لینک هم حذف نمی‌شود؛ پیش‌نویس می‌ماند تا ادمین
+                    # خودش منتشرش کند یا لینک دستی بگذارد.
+                    logger.info(
+                        "manual import without downloads, kept as draft: %s/%s",
+                        media_type, tmdb_id,
+                    )
                 else:
                     # لینک دانلود ندارد: خود اثر حذف می‌شود و فقط سابقه‌اش
                     # می‌ماند تا ایجنت دوباره سراغش نرود.
@@ -602,6 +637,90 @@ class ContentAgent:
                     item.save(update_fields=["status", "object_id"])
                     item.auto_removed = True
                     logger.info("no downloads, auto-removed: %s/%s", media_type, tmdb_id)
+            # برای پاسخ API افزودن دستی؛ روی مدل ذخیره نمی‌شود
+            item.download_summary = summary
+        return item
+
+    # ---------------- افزودن دستی با IMDb ----------------
+    def resolve_imdb(self, imdb_id, media_type=None):
+        """IMDb ID را به (نوع دامنه، TMDB ID) تبدیل می‌کند.
+
+        شناسه‌ی یک قسمت سریال هم پذیرفته می‌شود و به خود سریالش می‌رسد.
+        """
+        data = self.client._get(f"find/{imdb_id}", {"external_source": "imdb_id"})
+        movie_results = data.get("movie_results") or []
+        tv_results = data.get("tv_results") or []
+        movie_tmdb = movie_results[0].get("id") if movie_results else None
+        tv_tmdb = tv_results[0].get("id") if tv_results else None
+        if not tv_tmdb:
+            episode_results = data.get("tv_episode_results") or []
+            if episode_results:
+                tv_tmdb = episode_results[0].get("show_id")
+        if media_type == "movie":
+            if not movie_tmdb:
+                raise ImdbNotFound("برای این IMDb در TMDB فیلمی پیدا نشد.")
+            return "movie", movie_tmdb
+        if media_type == "series":
+            if not tv_tmdb:
+                raise ImdbNotFound("برای این IMDb در TMDB سریالی پیدا نشد.")
+            return "series", tv_tmdb
+        if movie_tmdb and tv_tmdb:
+            raise AmbiguousImdb(
+                "این IMDb هم فیلم دارد هم سریال؛ نوع اثر (فیلم/سریال) را مشخص کنید."
+            )
+        if movie_tmdb:
+            return "movie", movie_tmdb
+        if tv_tmdb:
+            return "series", tv_tmdb
+        raise ImdbNotFound("برای این IMDb در TMDB اثری پیدا نشد.")
+
+    def import_by_imdb(self, imdb_id, media_type=None, triggered_by=None):
+        """افزودن دستی یک فیلم/سریال با IMDb ID (از پنل ایجنت).
+
+        برخلاف کشف انبوه: بازه‌ی تاریخ و فیلتر امتیاز اعمال نمی‌شود و اگر
+        لینک دانلودی پیدا نشود اثر حذف نمی‌شود، پیش‌نویس می‌ماند.
+        AgentImportedItem ساخته‌شده برگردانده می‌شود.
+        """
+        imdb_id = normalize_imdb_id(imdb_id)
+        media_type, tmdb_id = self.resolve_imdb(imdb_id, media_type=media_type)
+        model = Movie if media_type == "movie" else Series
+        if self._already_have(media_type, tmdb_id):
+            raise AlreadyExists("این اثر قبلاً در سایت هست.")
+        # سابقه‌ی ردشده/حذف‌شده‌ی قبلی (لیست سیاه ایجنت) جلوی افزودن دستی
+        # را نمی‌گیرد؛ سابقه‌ای که اثرش هنوز هست یعنی تکراری واقعی است.
+        for old in AgentImportedItem.objects.filter(media_type=media_type, tmdb_id=tmdb_id):
+            if old.object_id and model.objects.filter(id=old.object_id).exists():
+                raise AlreadyExists("این اثر قبلاً در سایت هست.")
+            old.delete()
+
+        run = self._create_run(triggered_by, AgentRun.TRIGGER_MANUAL, ["imdb"])
+        candidate = {
+            "media_type": "movie" if media_type == "movie" else "tv",
+            "tmdb_id": tmdb_id,
+            "vote_average": 0,
+            "vote_count": 0,
+        }
+        run.found_count = 1
+        try:
+            item = self.import_candidate(run, candidate, manual=True)
+        except AlreadyExists:
+            run.existing_skipped = 1
+            run.status = AgentRun.STATUS_SUCCESS
+            raise
+        except Exception as exc:
+            run.status = AgentRun.STATUS_FAILED
+            run.failed_count = 1
+            run.errors = [{"media_type": media_type, "tmdb_id": tmdb_id, "error": str(exc)[:300]}]
+            raise
+        else:
+            if media_type == "movie":
+                run.created_movies = 1
+            else:
+                run.created_series = 1
+            run.status = AgentRun.STATUS_SUCCESS
+        finally:
+            run.finished_at = timezone.now()
+            run.save()
         return item
 
     # ---------------- اجرای کامل ----------------

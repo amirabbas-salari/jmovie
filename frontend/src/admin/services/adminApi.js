@@ -87,7 +87,11 @@ export const peopleApi = crud("/admin/people/")
 export const genresApi = crud("/admin/genres/")
 export const collectionsApi = crud("/admin/collections/")
 export const collectionItemsApi = crud("/admin/collection-items/")
-export const downloadsApi = crud("/admin/downloads/")
+export const downloadsApi = {
+  ...crud("/admin/downloads/"),
+  // حذف همه‌ی ردیف‌هایی که دقیقاً یک آدرس مشخص دارند (مثلاً لینک خراب/تکراری)
+  deleteByUrl: async (url) => (await api.post("/admin/downloads/delete-by-url/", { url })).data,
+}
 export const commentsApi = {
   ...crud("/admin/comments/"),
   approve: async (id) => (await api.post(`/admin/comments/${id}/approve/`)).data,
@@ -112,6 +116,7 @@ export const agentApi = {
   act: async (id, action) => (await api.post(`/agent/drafts/${id}/${action}/`)).data,
   bulk: async (ids, action) => (await api.post("/agent/drafts/bulk/", { ids, action })).data,
   fetchDownloads: async (id) => (await api.post(`/agent/drafts/${id}/fetch-downloads/`)).data,
+  importByImdb: async (payload) => (await api.post("/agent/import-by-imdb/", payload)).data,
 }
 
 // سازگاری با نام‌های قدیمی (اگر جایی هنوز استفاده شوند)
