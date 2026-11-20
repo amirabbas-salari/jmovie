@@ -397,7 +397,7 @@ def extract_download_links(html, page_url):
     return links
 
 
-def _download_page_candidates(html, page_url):
+def _download_page_candidates(html, page_url, limit=MAX_CANDIDATE_PAGES):
     """لینک «صفحه‌ی دانلود» جدا (دکمه‌ی دانلود) برای دنبال‌کردن یک سطح."""
     host = urlparse(page_url).netloc
     out = []
@@ -415,7 +415,7 @@ def _download_page_candidates(html, page_url):
         if "دانلود" in text or "download" in text.lower() or "/download" in absolute.lower():
             if absolute not in out:
                 out.append(absolute)
-        if len(out) >= MAX_CANDIDATE_PAGES:
+        if len(out) >= limit:
             break
     return out
 
@@ -429,6 +429,18 @@ def _episode_page_candidates(html, page_url):
     صفحه‌ی قسمت (که اغلب اسم مبهم دارند) به قسمت درست وصل شوند.
     """
     host = urlparse(page_url).netloc
+    # واژه‌های اسلاگ خود صفحه‌ی سریال (مثل test-show از /show/test-show/)؛
+    # لینک‌های زیر همان خانواده‌ی اسلاگ (قسمت‌ها و فصل‌های همین سریال)
+    # حتی اگر متنشان فقط عنوان قسمت باشد هم کاندیدای دنبال‌کردن‌اند.
+    generic_path_tokens = {
+        "series", "tv", "show", "movie", "film", "episode", "episodes",
+        "season", "watch", "download", "post", "page",
+    }
+    own_tokens = {
+        t for t in _normalize(unquote(urlparse(page_url).path)).split()
+        if len(t) >= 2 and t not in STOP_TOKENS and t not in generic_path_tokens
+        and not t.isdigit()
+    }
     out = []
     seen = set()
     for href, text, tail in _anchors(html):
@@ -444,11 +456,14 @@ def _episode_page_candidates(html, page_url):
             continue
         label = f"{text} {tail}"
         season, episode = _season_episode_of(f"{unquote(absolute)} {label}")
+        href_tokens = set(_normalize(unquote(absolute)).split())
+        in_family = bool(own_tokens) and own_tokens <= href_tokens
         looks_episode = (
             episode is not None
             or "قسمت" in label
             or "episode" in label.lower()
             or "/episode" in parsed.path.lower()
+            or in_family
         )
         if not looks_episode or absolute in seen:
             continue
@@ -546,31 +561,48 @@ def find_title_pages(session, base_url, *, imdb_id="", original_title="", title=
     return [url for url, _score in ranked[:MAX_CANDIDATE_PAGES]]
 
 
+def _resolve_series_episode(episode_index, link):
+    """قسمت متناظر یک لینک سریال از روی (فصل، قسمت)؛ وگرنه None.
+
+    اگر فصل معلوم نیست، وقتی شماره‌ی قسمت در کل سریال یکتا باشد (مثلاً
+    فقط فصل دوم قسمت ۵ دارد) همان انتخاب می‌شود؛ اگر چند فصل آن شماره
+    را دارند، حدس نمی‌زنیم.
+    """
+    episode_no = link.get("episode")
+    if not episode_no:
+        return None
+    season_no = link.get("season")
+    if season_no is not None:
+        return episode_index.get((season_no, episode_no))
+    matches = [ep for (_s, e), ep in episode_index.items() if e == episode_no]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _series_episode_index(series):
+    index = {}
+    for season in series.seasons.all():
+        for episode in season.episodes.all():
+            index[(season.season_number, episode.episode_number)] = episode
+    return index
+
+
 def attach_downloads(media, media_type, links):
-    """لینک‌ها را به فیلم/سریال یا قسمت درست وصل می‌کند؛ تعداد ساخته‌شده."""
+    """لینک‌ها را به فیلم یا قسمت درست سریال وصل می‌کند؛ تعداد ساخته‌شده.
+
+    برای سریال فقط لینک‌هایی وصل می‌شوند که شماره‌ی قسمتشان معلوم است و
+    آن قسمت در سایت وجود دارد؛ لینک بی‌قسمت به خود آبجکت سریال وصل نمی‌شود.
+    """
     from downloads.models import Download
 
     # نوع مدیا از TMDB ممکن است "tv" باشد؛ هر دو یعنی سریال
     is_series = media_type in ("series", "tv")
-    episode_index = {}
-    if is_series:
-        for season in media.seasons.all():
-            for episode in season.episodes.all():
-                episode_index[(season.season_number, episode.episode_number)] = episode
-    seasons_present = {s for s, _e in episode_index}
+    episode_index = _series_episode_index(media) if is_series else {}
 
     def target_for(link):
         if is_series:
             # لینک دانلود سریال متعلق به قسمت‌هاست، نه خود سریال: لینکی که
             # به قسمت مشخصی نمی‌رسد (مثل تریلر یا لینک کلی صفحه) وصل نمی‌شود.
-            if link.get("episode"):
-                season_no = link.get("season")
-                if season_no is None and len(seasons_present) == 1:
-                    season_no = next(iter(seasons_present))
-                episode = episode_index.get((season_no, link["episode"]))
-                if episode is not None:
-                    return episode
-            return None
+            return _resolve_series_episode(episode_index, link)
         return media
 
     created = 0
@@ -624,18 +656,28 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
         صفحه‌های سایت‌های دانلود ستون کناری «قسمت‌های تازه‌ی سریال‌های
         دیگر» دارند و لینک‌هایشان شبیه لینک قسمت‌های همین سریال است؛
         بدون این چک، لینک دانلود سریال‌های دیگر به قسمت‌های این سریال
-        می‌چسبید. تعلق با IMDb یا آمدن همه‌ی واژه‌های عنوان (فارسی یا
-        انگلیسی) در آدرس/متن صفحه سنجیده می‌شود.
+        می‌چسبید. تعلق با IMDb یا تطابق واژه‌های عنوان (فارسی/انگلیسی)
+        در آدرس/متن صفحه سنجیده می‌شود: تطابق کامل، یا برای عنوان‌های
+        چندواژه‌ای تطابق قویِ بخشی (سایت‌ها اغلب نام کوتاه‌تر می‌گذارند).
         """
         if not is_series:
             return True
         if imdb_id and imdb_id.lower() in f"{page_url} {page_html}".lower():
             return True
         haystack = _normalize(f"{unquote(page_url)} {_strip_tags(page_html)}")
-        return any(
-            tokens and all(token in haystack for token in tokens)
-            for tokens in (en_tokens, fa_tokens)
-        )
+        for tokens in (en_tokens, fa_tokens):
+            if not tokens:
+                continue
+            matched = sum(1 for token in tokens if token in haystack)
+            if matched == len(tokens):
+                return True
+            # اسلاگ/نام نمایشی سایت اغلب کوتاه‌تر از عنوان کامل TMDB است
+            # («rings-of-power» در برابر «The Lord of the Rings: The
+            # Rings of Power»)؛ تطابق قویِ بخشی هم قبول است. سریال خارجی
+            # عملاً هیچ‌یک از واژه‌های خاص این عنوان را ندارد و رد می‌شود.
+            if len(tokens) >= 3 and matched >= 2 and matched / len(tokens) >= 0.6:
+                return True
+        return False
 
     def episode_candidate_priority(candidate):
         # صفحه‌هایی که اسلاگشان عنوان همین سریال را دارد اول دنبال شوند؛
@@ -718,7 +760,9 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
             # صفحه‌ی اثر گاهی فقط دکمه‌ی «دانلود» دارد و لینک‌ها صفحه‌ی جدا
             # هستند؛ برای سریال این صفحه (فهرست همه‌ی قسمت‌ها) حتی وقتی روی
             # صفحه‌ی اصلی چند لینک هست هم دنبال می‌شود.
-            for sub_url in _download_page_candidates(html, final_url):
+            for sub_url in _download_page_candidates(
+                html, final_url, limit=4 if is_series else MAX_CANDIDATE_PAGES
+            ):
                 if sub_url in fetched:
                     continue
                 fetched.add(sub_url)
@@ -736,9 +780,14 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
     # دانلود) خودش «لینک دانلود» نیست، هرچند روی هاست dl.* استخراج شده باشد.
     unique = {link["url"]: link for link in all_links if link["url"] not in fetched}
     if is_series:
-        # برای سریال فقط لینکِ رسیده به قسمت مشخص شمرده می‌شود؛ لینک
-        # بی‌قسمت (تریلر و مانند آن) «لینک دانلود سریال» حساب نمی‌شود.
-        unique = {url: link for url, link in unique.items() if link.get("episode")}
+        # برای سریال فقط لینکی شمرده می‌شود که به قسمتی می‌رسد که واقعاً
+        # در سایت هست؛ لینک بی‌قسمت (تریلر) یا قسمتِ واردنشده «لینک
+        # دانلود» حساب نمی‌شود تا سریال الکی «دارای لینک» منتشر نشود.
+        episode_index = _series_episode_index(media)
+        unique = {
+            url: link for url, link in unique.items()
+            if _resolve_series_episode(episode_index, link) is not None
+        }
     created = attach_downloads(media, media_type, list(unique.values())) if unique else 0
     result = {"pages": len(pages), "found": len(unique), "created": created}
     if not unique:

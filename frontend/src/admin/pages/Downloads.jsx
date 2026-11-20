@@ -26,6 +26,30 @@ export default function Downloads() {
   const [toDelete, setToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [urlToolOpen, setUrlToolOpen] = useState(false)
+  const [orphanCount, setOrphanCount] = useState(0)
+  const [purgeConfirm, setPurgeConfirm] = useState(false)
+  const [purging, setPurging] = useState(false)
+  const [notice, setNotice] = useState("")
+  const [pageError, setPageError] = useState("")
+
+  const refreshOrphans = () => {
+    downloadsApi.orphansCount().then((d) => setOrphanCount(d.count)).catch(() => {})
+  }
+  useEffect(refreshOrphans, [])
+
+  const purgeOrphans = async () => {
+    setPurging(true); setPageError("")
+    try {
+      const res = await downloadsApi.purgeOrphans()
+      setPurgeConfirm(false)
+      setOrphanCount(0)
+      setNotice(`${res.deleted} لینک یتیم (هدف حذف‌شده) پاک شد.`)
+      list.reload()
+    } catch (err) {
+      setPageError(getApiError(err, "پاکسازی لینک‌های یتیم با خطا مواجه شد."))
+      setPurgeConfirm(false)
+    } finally { setPurging(false) }
+  }
 
   const save = async () => {
     setSaving(true)
@@ -44,6 +68,7 @@ export default function Downloads() {
       await downloadsApi.remove(toDelete.id)
       list.setItems((p) => p.filter((d) => d.id !== toDelete.id))
       setToDelete(null)
+      refreshOrphans()
     } finally { setDeleting(false) }
   }
 
@@ -55,6 +80,11 @@ export default function Downloads() {
           <p className="mt-1 text-sm text-zinc-500">همه‌ی لینک‌های فیلم، سریال و قسمت‌ها در یک جا</p>
         </div>
         <span className="ms-auto flex flex-wrap gap-2">
+          {can(P.downloadDelete) && orphanCount > 0 && (
+            <GhostBtn onClick={() => setPurgeConfirm(true)}>
+              <Trash2 className="h-4 w-4" /> پاکسازی لینک‌های یتیم ({orphanCount})
+            </GhostBtn>
+          )}
           {can(P.downloadDelete) && (
             <GhostBtn onClick={() => setUrlToolOpen(true)}>
               <Trash2 className="h-4 w-4" /> حذف لینک با آدرس
@@ -81,7 +111,10 @@ export default function Downloads() {
         </select>
       </div>
 
-      <ErrorBox message={list.error} />
+      {notice && (
+        <div className="mb-5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">{notice}</div>
+      )}
+      <ErrorBox message={pageError || list.error} />
       {list.loading ? <Spinner /> : list.items.length === 0 ? <EmptyState text="لینکی یافت نشد." /> : (
         <>
           <div className="overflow-hidden rounded-2xl border border-white/10">
@@ -143,7 +176,17 @@ export default function Downloads() {
         <ConfirmModal title="حذف لینک" message={`لینک «${toDelete.quality}» برای «${toDelete.target_title}» حذف شود؟`} loading={deleting} onCancel={() => setToDelete(null)} onConfirm={confirmDelete} />
       )}
       {urlToolOpen && (
-        <DeleteByUrlModal onClose={() => setUrlToolOpen(false)} onDeleted={() => list.reload()} />
+        <DeleteByUrlModal onClose={() => setUrlToolOpen(false)} onDeleted={() => { list.reload(); refreshOrphans() }} />
+      )}
+      {purgeConfirm && (
+        <ConfirmModal
+          title="پاکسازی لینک‌های یتیم"
+          message={`${orphanCount} لینک دانلود که هدفشان (فیلم/سریال/قسمت) دیگر وجود ندارد حذف شود؟ این لینک‌ها روی سایت نمایش داده نمی‌شوند و حذفشان اثری روی آثار موجود ندارد.`}
+          confirmLabel="پاکسازی"
+          loading={purging}
+          onCancel={() => setPurgeConfirm(false)}
+          onConfirm={purgeOrphans}
+        />
       )}
     </div>
   )

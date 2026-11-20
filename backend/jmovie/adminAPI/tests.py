@@ -814,3 +814,78 @@ class AdminDownloadToolsTest(TestCase):
         from downloads.models import Download
 
         self.assertEqual(Download.objects.filter(url=self.SHARED_URL).count(), 2)
+
+
+class AdminOrphanDownloadsTest(TestCase):
+    """شمارش و پاکسازی لینک‌های یتیم (هدف حذف‌شده) در پنل دانلودها."""
+
+    def setUp(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+        from series.models import Season, Series
+
+        self.client = APIClient()
+        self.superadmin = make_user("orphanroot", is_staff=True, is_superuser=True)
+        self.client.force_authenticate(user=self.superadmin)
+
+        self.movie = Movie.objects.create(title="فیلم سالم", imdb_id="tt4000001", runtime=90)
+        movie_ct = ContentType.objects.get_for_model(Movie)
+        self.valid_download = Download.objects.create(
+            content_type=movie_ct, object_id=self.movie.id,
+            quality="1080p", url="https://dl.example.com/valid.mkv",
+        )
+        # یتیم نوع اول: دانلودِ روی فصل — Season رابطه‌ی Generic دانلود
+        # ندارد، پس با حذف فصل ردیفش یتیم می‌ماند (دانلود قسمت/فیلم/سریال
+        # با حذف هدفشان خودکار پاک می‌شوند و یتیم نیستند).
+        series = Series.objects.create(title="سریال موقت", imdb_id="tt4000002")
+        season = Season.objects.create(series=series, season_number=1)
+        season_ct = ContentType.objects.get_for_model(Season)
+        Download.objects.create(
+            content_type=season_ct, object_id=season.id,
+            quality="720p", url="https://dl.example.com/orphan-season.mkv",
+        )
+        season.delete()
+        # یتیم نوع دوم: از اول به آی‌دی ناموجود اشاره می‌کند
+        Download.objects.create(
+            content_type=movie_ct, object_id=987654,
+            quality="720p", url="https://dl.example.com/orphan-movie.mkv",
+        )
+
+    def test_orphans_count_and_purge(self):
+        from adminAPI.models import AdminAuditLog
+        from downloads.models import Download
+
+        res = self.client.get("/admin/downloads/orphans-count/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["count"], 2)
+
+        res = self.client.post("/admin/downloads/purge-orphans/", {}, format="json")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["deleted"], 2)
+        # لینک سالم می‌ماند و شمارش صفر می‌شود
+        self.assertTrue(Download.objects.filter(id=self.valid_download.id).exists())
+        self.assertEqual(Download.objects.count(), 1)
+        self.assertEqual(self.client.get("/admin/downloads/orphans-count/").data["count"], 0)
+        # دوباره پاکسازی چیزی حذف نمی‌کند
+        res = self.client.post("/admin/downloads/purge-orphans/", {}, format="json")
+        self.assertEqual(res.data["deleted"], 0)
+        self.assertEqual(
+            AdminAuditLog.objects.filter(
+                action=AdminAuditLog.ACTION_DELETE, model_label="downloads.download"
+            ).count(),
+            2,
+        )
+
+    def test_purge_orphans_requires_delete_permission(self):
+        viewer = make_user("orphanviewer", is_staff=True)
+        role = Group.objects.create(name="مشاهده دانلود یتیم")
+        role.permissions.set(Permission.objects.filter(codename__in=["view_download"]))
+        viewer.groups.add(role)
+        self.client.force_authenticate(user=viewer)
+        self.assertEqual(self.client.get("/admin/downloads/orphans-count/").status_code, 200)
+        res = self.client.post("/admin/downloads/purge-orphans/", {}, format="json")
+        self.assertEqual(res.status_code, 403)
+        from downloads.models import Download
+
+        self.assertEqual(Download.objects.count(), 3)
