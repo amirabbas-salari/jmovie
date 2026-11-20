@@ -201,7 +201,7 @@ export function DownloadsManager({ targetType, objectId }) {
           <a href={d.url} target="_blank" rel="noreferrer" className="max-w-[220px] truncate text-[11px] text-zinc-500 hover:text-zinc-300" dir="ltr">{d.url}</a>
           <span className="ms-auto flex gap-1.5">
             {can(P.downloadChange) && (
-              <button onClick={() => setForm({ ...emptyDownload, ...d })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10" aria-label="ویرایش لینک">
+              <button type="button" onClick={() => setForm({ ...emptyDownload, ...d })} className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10" aria-label="ویرایش لینک">
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             )}

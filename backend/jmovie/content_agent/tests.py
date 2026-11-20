@@ -861,3 +861,165 @@ class ReleaseRangeTest(TestCase):
         settings_obj.save()
         run2 = ContentAgent().run(sources=["trending"], max_items=10)
         self.assertEqual(run2.created_movies, 2)
+
+
+# ---------------------------------------------------------------------------
+# لینک دانلود سریال = لینک قسمت‌ها: دنبال‌کردن صفحه‌ی هر قسمت، نادیده‌گرفتن
+# تریلر و وصل‌نشدن هیچ لینکی به خود آبجکت سریال
+# ---------------------------------------------------------------------------
+EP_SEARCH_HTML = """<html><body>
+<a href="https://dl.example.com/show/test-show/">Test Show دانلود سریال</a>
+</body></html>"""
+
+EPISODE_PAGES_SERIES_HTML = """<html><body>
+<a href="https://dl.example.com/files/Test.Show.Trailer.1080p.mp4">تریلر سریال</a>
+<a href="https://dl.example.com/episode/test-show-ep1/">دانلود قسمت ۱</a>
+<a href="https://dl.example.com/episode/test-show-ep2/">دانلود قسمت ۲</a>
+</body></html>"""
+
+EP1_PAGE_HTML = """<html><body>
+<a href="https://dl.example.com/files/opaque-111.mkv">دانلود 720p حجم 700 MB زیرنویس فارسی</a>
+<a href="https://dl.example.com/files/opaque-112.mkv">دانلود 1080p</a>
+</body></html>"""
+
+EP2_PAGE_HTML = """<html><body>
+<a href="https://dl.example.com/files/opaque-211.mkv">دانلود 720p</a>
+</body></html>"""
+
+# لینک‌های مستقیم روی خود صفحه‌ی سریال، با شماره‌ی حروفی و ردیف‌های گروهی
+ORDINAL_SERIES_HTML = """<html><body>
+<h3>فصل اول</h3>
+<p>قسمت اول: <a href="https://dl.example.com/files/aa1.mkv">دانلود 720p</a>
+<a href="https://dl.example.com/files/aa2.mkv">دانلود 1080p</a></p>
+<p>قسمت دوم: <a href="https://dl.example.com/files/bb1.mkv">دانلود 720p</a></p>
+<a href="https://dl.example.com/files/Test.Show.Trailer.mp4">مشاهده تریلر</a>
+</body></html>"""
+
+NO_EPISODE_SERIES_HTML = """<html><body>
+<a href="https://dl.example.com/files/show-full-1080p.mkv">دانلود سریال با کیفیت 1080p</a>
+<a href="https://dl.example.com/files/show-trailer.mp4">تریلر</a>
+</body></html>"""
+
+
+def _fake_fetch_episode_pages(_session, url):
+    if "s=" in url or "/search" in url:
+        return EP_SEARCH_HTML, url
+    if "test-show-ep1" in url:
+        return EP1_PAGE_HTML, url
+    if "test-show-ep2" in url:
+        return EP2_PAGE_HTML, url
+    if url.rstrip("/").endswith("test-show"):
+        return EPISODE_PAGES_SERIES_HTML, url
+    return "<html><body></body></html>", url
+
+
+class SeriesEpisodeDownloadTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        from series.models import Episode, Season, Series
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = True
+        settings_obj.download_source_url = "https://dl.example.com"
+        settings_obj.save()
+        self.show = Series.objects.create(
+            title="سریال تستی", original_title="Test Show",
+            imdb_id="tt9990101", tmdb_id=999101,
+        )
+        season = Season.objects.create(series=self.show, season_number=1)
+        self.ep1 = Episode.objects.create(season=season, episode_number=1)
+        self.ep2 = Episode.objects.create(season=season, episode_number=2)
+
+    def _downloads_of(self, obj):
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+
+        ct = ContentType.objects.get_for_model(obj.__class__)
+        return Download.objects.filter(content_type=ct, object_id=obj.id)
+
+    @patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_episode_pages)
+    def test_episode_pages_followed_and_trailer_ignored(self, _fetch):
+        summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 3)
+        self.assertEqual(summary["created"], 3)
+        self.assertEqual(self._downloads_of(self.ep1).count(), 2)
+        self.assertEqual(self._downloads_of(self.ep2).count(), 1)
+        # هیچ لینکی به خود سریال وصل نشده و تریلر هیچ‌جا ذخیره نشده است
+        self.assertEqual(self._downloads_of(self.show).count(), 0)
+        from downloads.models import Download
+
+        self.assertFalse(Download.objects.filter(url__icontains="trailer").exists())
+
+    def test_grouped_ordinal_links_attach_to_episodes(self):
+        from content_agent import download_source
+
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            return ORDINAL_SERIES_HTML, url
+
+        with patch("content_agent.download_source.fetch_html", side_effect=fake):
+            summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 3)
+        # کیفیت دومِ قسمت اول هم مال قسمت اول است، نه قسمت دوم
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep1)},
+            {"https://dl.example.com/files/aa1.mkv", "https://dl.example.com/files/aa2.mkv"},
+        )
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep2)},
+            {"https://dl.example.com/files/bb1.mkv"},
+        )
+        self.assertEqual(self._downloads_of(self.show).count(), 0)
+        self.assertEqual(
+            download_source.attach_downloads(self.show, "series", [{
+                "url": "https://dl.example.com/files/series-level.mkv", "title": "",
+                "quality": "1080p", "size": "", "language": "original",
+                "subtitle": False, "season": None, "episode": None,
+            }]),
+            0,
+        )
+
+    def test_series_without_episode_links_gets_nothing(self):
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            return NO_EPISODE_SERIES_HTML, url
+
+        with patch("content_agent.download_source.fetch_html", side_effect=fake):
+            summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 0)
+        self.assertEqual(summary["created"], 0)
+        self.assertTrue(summary.get("reason"))
+        self.assertEqual(self._downloads_of(self.show).count(), 0)
+        self.assertEqual(self._downloads_of(self.ep1).count(), 0)
+
+
+class EpisodeExtractionTest(TestCase):
+    BASE = "https://dl.example.com/show/x/"
+
+    def extract(self, html):
+        from content_agent import download_source
+
+        return download_source.extract_download_links(html, self.BASE)
+
+    def test_trailer_links_are_skipped(self):
+        html = """<html><body>
+        <a href="https://dl.example.com/files/Show.Trailer.1080p.mp4">دانلود تریلر</a>
+        <a href="https://dl.example.com/files/Show.S01E01.720p.mkv">دانلود قسمت 1</a>
+        </body></html>"""
+        links = self.extract(html)
+        self.assertEqual(len(links), 1)
+        self.assertEqual((links[0]["season"], links[0]["episode"]), (1, 1))
+
+    def test_persian_ordinal_episode_numbers(self):
+        html = """<html><body>
+        <p>قسمت سوم: <a href="https://dl.example.com/files/x1.mkv">دانلود 720p</a></p>
+        <p>قسمت چهارم: <a href="https://dl.example.com/files/x2.mkv">دانلود 720p</a></p>
+        </body></html>"""
+        links = self.extract(html)
+        self.assertEqual([l["episode"] for l in links], [3, 4])
