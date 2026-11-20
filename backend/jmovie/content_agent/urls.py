@@ -5,6 +5,7 @@ from .views import (
     AgentDraftBulkActionView,
     AgentDraftFetchDownloadsView,
     AgentDraftListView,
+    AgentImportByImdbView,
     AgentRunListView,
     AgentRunView,
     AgentSettingsView,
@@ -13,6 +14,7 @@ from .views import (
 urlpatterns = [
     path("settings/", AgentSettingsView.as_view(), name="agent-settings"),
     path("run/", AgentRunView.as_view(), name="agent-run"),
+    path("import-by-imdb/", AgentImportByImdbView.as_view(), name="agent-import-by-imdb"),
     path("runs/", AgentRunListView.as_view(), name="agent-runs"),
     path("drafts/", AgentDraftListView.as_view(), name="agent-drafts"),
     path("drafts/bulk/", AgentDraftBulkActionView.as_view(), name="agent-drafts-bulk"),

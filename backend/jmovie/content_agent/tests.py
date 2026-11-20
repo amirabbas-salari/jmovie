@@ -1023,3 +1023,186 @@ class EpisodeExtractionTest(TestCase):
         </body></html>"""
         links = self.extract(html)
         self.assertEqual([l["episode"] for l in links], [3, 4])
+
+
+# ---------------------------------------------------------------------------
+# افزودن دستی با IMDb ID از پنل: resolve، انتشار با لینک، ماندن پیش‌نویس
+# بدون لینک (برخلاف کشف انبوه که حذف می‌کرد) و رد تکراری‌ها
+# ---------------------------------------------------------------------------
+class FakeTMDBClientImdb(FakeTMDBClient2):
+    """find/{imdb_id} برای تست افزودن با IMDb.
+
+    tt9990001 → فیلم 999001، tt9990101 → سریال 999101 و tt9990201 شناسه‌ی
+    یک قسمت از همان سریال است (از قسمت هم باید به سریالش برسد).
+    """
+
+    FIND = {
+        "tt9990001": {"movie_results": [{"id": 999001}], "tv_results": []},
+        "tt9990101": {"movie_results": [], "tv_results": [{"id": 999101}]},
+        "tt9990201": {
+            "movie_results": [], "tv_results": [],
+            "tv_episode_results": [{"show_id": 999101}],
+        },
+    }
+
+    def _get(self, endpoint, params=None):
+        if endpoint.startswith("find/"):
+            imdb_id = endpoint.split("/", 1)[1]
+            return self.FIND.get(imdb_id, {"movie_results": [], "tv_results": []})
+        return super()._get(endpoint, params)
+
+
+def _fake_fetch_nothing(_session, url):
+    return "<html><body>بدون نتیجه</body></html>", url
+
+
+class ImportByImdbTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = True
+        settings_obj.download_source_url = "https://dl.example.com"
+        settings_obj.save()
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientImdb)
+    @patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_html)
+    def test_series_by_imdb_published_with_episode_downloads(self, _fetch):
+        item = ContentAgent().import_by_imdb("tt9990101")
+        self.assertEqual(item.media_type, "series")
+        self.assertEqual(item.status, AgentImportedItem.STATUS_APPROVED)
+        show = Series.objects.get(tmdb_id=999101)
+        self.assertTrue(show.is_active)
+        run = item.run
+        self.assertEqual(run.sources, ["imdb"])
+        self.assertEqual(run.created_series, 1)
+        self.assertEqual(run.status, AgentRun.STATUS_SUCCESS)
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+        from series.models import Episode
+
+        ep_ct = ContentType.objects.get_for_model(Episode)
+        self.assertEqual(Download.objects.filter(content_type=ep_ct).count(), 2)
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientImdb)
+    @patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_nothing)
+    def test_series_by_imdb_without_downloads_stays_draft(self, _fetch):
+        # افزودن دستی است: بی‌لینک هم حذف نمی‌شود، پیش‌نویس می‌ماند
+        item = ContentAgent().import_by_imdb("tt9990101")
+        show = Series.objects.get(tmdb_id=999101)
+        self.assertFalse(show.is_active)
+        self.assertEqual(item.status, AgentImportedItem.STATUS_PENDING)
+        self.assertEqual(item.object_id, show.id)
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientImdb)
+    @patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_html)
+    def test_movie_by_imdb_and_duplicate_rejected(self, _fetch):
+        item = ContentAgent().import_by_imdb("9990001")  # بدون پیشوند tt هم می‌شود
+        self.assertEqual(item.media_type, "movie")
+        self.assertTrue(Movie.objects.get(tmdb_id=999001).is_active)
+        from content_agent.services import AlreadyExists
+
+        with self.assertRaises(AlreadyExists):
+            ContentAgent().import_by_imdb("tt9990001")
+        self.assertEqual(Movie.objects.filter(tmdb_id=999001).count(), 1)
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientImdb)
+    @patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_nothing)
+    def test_episode_imdb_resolves_to_its_series(self, _fetch):
+        item = ContentAgent().import_by_imdb("tt9990201")
+        self.assertEqual(item.media_type, "series")
+        self.assertTrue(Series.objects.filter(tmdb_id=999101).exists())
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientImdb)
+    def test_unknown_and_invalid_imdb(self):
+        from content_agent.services import ImdbNotFound
+
+        with self.assertRaises(ImdbNotFound):
+            ContentAgent().import_by_imdb("tt0000000")
+        with self.assertRaises(ValueError):
+            ContentAgent().import_by_imdb("not-an-imdb")
+        self.assertEqual(Series.objects.count(), 0)
+        self.assertEqual(Movie.objects.count(), 0)
+
+    @patch("content_agent.services.TMDBClient", FakeTMDBClientImdb)
+    @patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_nothing)
+    def test_blacklisted_item_can_be_added_manually(self, _fetch):
+        run = AgentRun.objects.create(trigger_type=AgentRun.TRIGGER_MANUAL)
+        AgentImportedItem.objects.create(
+            run=run, media_type="series", tmdb_id=999101,
+            imdb_id="tt9990101", title="ردشده‌ی قبلی",
+            status=AgentImportedItem.STATUS_REJECTED, object_id=None,
+        )
+        item = ContentAgent().import_by_imdb("tt9990101")
+        self.assertEqual(item.status, AgentImportedItem.STATUS_PENDING)
+        self.assertEqual(
+            AgentImportedItem.objects.filter(media_type="series", tmdb_id=999101).count(), 1
+        )
+        self.assertTrue(Series.objects.filter(tmdb_id=999101).exists())
+
+
+@patch("content_agent.services.TMDBClient", FakeTMDBClientImdb)
+class ImportByImdbApiTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = False
+        settings_obj.download_source_url = ""
+        settings_obj.save()
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            username="imdbboss", email="imdbboss@test.ir",
+            password="Str0ng!Pass123", is_staff=True, is_superuser=True
+        )
+        self.client.force_authenticate(self.admin)
+
+    def test_import_series_endpoint(self):
+        res = self.client.post(
+            "/agent/import-by-imdb/", {"imdb_id": "tt9990101"}, format="json"
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["item"]["media_type"], "series")
+        self.assertEqual(res.data["item"]["tmdb_id"], 999101)
+        self.assertEqual(res.data["item"]["status"], "pending")
+        self.assertTrue(Series.objects.filter(tmdb_id=999101).exists())
+
+        # بار دوم: تکراری با لینک ویرایش اثر موجود
+        res2 = self.client.post(
+            "/agent/import-by-imdb/", {"imdb_id": "tt9990101"}, format="json"
+        )
+        self.assertEqual(res2.status_code, 409)
+        self.assertIn("/admin/series/", res2.data["existing"]["admin_edit_path"])
+
+    def test_import_endpoint_validation_and_not_found(self):
+        res = self.client.post(
+            "/agent/import-by-imdb/", {"imdb_id": "hello"}, format="json"
+        )
+        self.assertEqual(res.status_code, 400)
+        res = self.client.post(
+            "/agent/import-by-imdb/", {"imdb_id": "tt0000000"}, format="json"
+        )
+        self.assertEqual(res.status_code, 404)
+        # نوع اجباری اشتباه: این IMDb سریال است، نه فیلم
+        res = self.client.post(
+            "/agent/import-by-imdb/",
+            {"imdb_id": "tt9990101", "media_type": "movie"}, format="json",
+        )
+        self.assertEqual(res.status_code, 404)
+
+    def test_import_endpoint_requires_agent_permission(self):
+        staff = User.objects.create_user(
+            username="imdbstaff", email="imdbstaff@test.ir",
+            password="Str0ng!Pass123", is_staff=True
+        )
+        self.client.force_authenticate(staff)
+        res = self.client.post(
+            "/agent/import-by-imdb/", {"imdb_id": "tt9990101"}, format="json"
+        )
+        self.assertEqual(res.status_code, 403)
+        self.assertFalse(Series.objects.exists())

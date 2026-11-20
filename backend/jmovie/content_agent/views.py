@@ -13,7 +13,12 @@ from .serializers import (
     AgentRunSerializer,
     AgentSettingsSerializer,
 )
-from .services import ContentAgent
+from .services import (
+    AlreadyExists,
+    AmbiguousImdb,
+    ContentAgent,
+    ImdbNotFound,
+)
 
 
 class AgentWritePermission(permissions.BasePermission):
@@ -95,6 +100,74 @@ class AgentRunView(APIView):
         return Response(
             AgentRunSerializer(run).data, status=status.HTTP_202_ACCEPTED
         )
+
+
+class AgentImportByImdbView(APIView):
+    """افزودن دستی یک فیلم/سریال با IMDb ID از پنل.
+
+    هم‌زمان انجام می‌شود (یک اثر است، نه کشف انبوه): اگر لینک دانلود
+    پیدا شود اثر منتشرشده برمی‌گردد، وگرنه پیش‌نویس می‌ماند تا ادمین
+    تصمیم بگیرد — برخلاف اجرای انبوه، اثر بی‌لینک اینجا حذف نمی‌شود.
+    """
+
+    permission_classes = [IsStaffMember, AgentWritePermission]
+
+    def post(self, request):
+        imdb_id = request.data.get("imdb_id") or ""
+        media_type = request.data.get("media_type") or None
+        if media_type is not None and media_type not in ("movie", "series"):
+            return Response(
+                {"media_type": "باید movie یا series باشد (یا خالی برای تشخیص خودکار)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        agent = ContentAgent()
+        try:
+            item = agent.import_by_imdb(
+                imdb_id, media_type=media_type, triggered_by=request.user
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except ImdbNotFound as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        except AmbiguousImdb as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except AlreadyExists:
+            existing = self._find_existing(imdb_id)
+            return Response(
+                {
+                    "detail": "این اثر قبلاً در سایت هست.",
+                    "existing": existing,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(
+            {
+                "item": AgentImportedItemSerializer(item).data,
+                "summary": getattr(item, "download_summary", None),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @staticmethod
+    def _find_existing(imdb_id):
+        """اثر موجود با این IMDb برای لینک مستقیم ویرایش در پنل."""
+        from .services import normalize_imdb_id
+
+        try:
+            normalized = normalize_imdb_id(imdb_id)
+        except ValueError:
+            return None
+        for model, media_type in ((Movie, "movie"), (Series, "series")):
+            media = model.objects.filter(imdb_id=normalized).first()
+            if media is not None:
+                base = "movies" if media_type == "movie" else "series"
+                return {
+                    "media_type": media_type,
+                    "id": media.id,
+                    "title": media.title,
+                    "admin_edit_path": f"/admin/{base}/{media.id}/edit",
+                }
+        return None
 
 
 class AgentRunListView(APIView):

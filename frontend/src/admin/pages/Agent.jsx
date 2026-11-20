@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import {
-  Bot, Check, Download, Film, History, Play, Settings2, Sparkles, Tv, X,
+  Bot, Check, Download, Film, History, Play, Plus, Settings2, Sparkles, Tv, X,
 } from "lucide-react"
 import { agentApi, getApiError } from "../services/adminApi"
 import { useAdmin } from "../context/AdminContext"
@@ -28,6 +28,9 @@ export default function Agent() {
   const [selected, setSelected] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
+  const [imdbId, setImdbId] = useState("")
+  const [imdbType, setImdbType] = useState("auto")
+  const [importing, setImporting] = useState(false)
   const [fetchingId, setFetchingId] = useState(null)
   const [savingSettings, setSavingSettings] = useState(false)
   const [error, setError] = useState("")
@@ -135,6 +138,34 @@ export default function Agent() {
     }
   }
 
+  const importByImdb = async () => {
+    const value = imdbId.trim()
+    if (!value || importing) return
+    setImporting(true)
+    setNotice("")
+    setError("")
+    try {
+      const res = await agentApi.importByImdb({
+        imdb_id: value,
+        ...(imdbType !== "auto" ? { media_type: imdbType } : {}),
+      })
+      const item = res.item || {}
+      const summary = res.summary || {}
+      setImdbId("")
+      setTab(item.status === "approved" ? "approved" : "pending")
+      setNotice(
+        item.status === "approved"
+          ? `«${item.title}» اضافه و منتشر شد${summary.found ? ` (${summary.found} لینک دانلود)` : ""}.`
+          : `«${item.title}» به‌صورت پیش‌نویس اضافه شد؛ از فهرست زیر می‌توانید منتشرش کنید یا برایش لینک دانلود بگیرید.`
+      )
+      await load(true)
+    } catch (err) {
+      setError(getApiError(err))
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const fetchDownloads = async (item) => {
     setFetchingId(item.id)
     setNotice("")
@@ -232,6 +263,48 @@ export default function Agent() {
               برای اجرا/تأیید، مجوز «ایجنت محتوا» لازم است (سوپرادمین یا نقش دارای add_agentrun).
             </p>
           )}
+
+          <div className="mt-5 border-t border-white/10 pt-5">
+            <h3 className="mb-1 flex items-center gap-2 text-sm font-bold text-zinc-100">
+              <Plus className="h-4 w-4 text-rose-400" /> افزودن با IMDb
+            </h3>
+            <p className="mb-3 text-[11px] leading-5 text-zinc-500">
+              شناسه‌ی IMDb یک فیلم یا سریال (مثل <span dir="ltr" className="text-zinc-400">tt0903747</span>) را
+              وارد کنید تا همان یک اثر با اطلاعات کامل و فصل و قسمت‌ها اضافه شود.
+              اگر لینک دانلودش پیدا شود مستقیم منتشر می‌شود؛ وگرنه پیش‌نویس
+              می‌ماند تا خودتان تصمیم بگیرید.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={imdbId}
+                onChange={(e) => setImdbId(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") importByImdb() }}
+                placeholder="tt0903747"
+                dir="ltr"
+                disabled={!canRun || importing}
+                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-rose-400/50 disabled:opacity-50"
+              />
+              <select
+                value={imdbType}
+                onChange={(e) => setImdbType(e.target.value)}
+                disabled={!canRun || importing}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none focus:border-rose-400/50 disabled:opacity-50"
+              >
+                <option value="auto">خودکار</option>
+                <option value="movie">فیلم</option>
+                <option value="series">سریال</option>
+              </select>
+              <button
+                type="button"
+                onClick={importByImdb}
+                disabled={!canRun || importing || !imdbId.trim()}
+                className="btn-brand px-4 py-2.5 text-sm disabled:opacity-50"
+              >
+                {importing ? <Sparkles className="h-4 w-4 animate-pulse" /> : <Plus className="h-4 w-4" />}
+                {importing ? "در حال افزودن..." : "افزودن"}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 lg:col-span-3">
