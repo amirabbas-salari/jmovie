@@ -615,6 +615,40 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
         session, base_url,
         imdb_id=imdb_id, original_title=original_title, title=title, year=year,
     )
+    en_tokens = _title_tokens(original_title)
+    fa_tokens = _title_tokens(title)
+
+    def page_belongs_to_series(page_html, page_url):
+        """صفحه‌ی دنبال‌شده واقعاً مال همین سریال است؟
+
+        صفحه‌های سایت‌های دانلود ستون کناری «قسمت‌های تازه‌ی سریال‌های
+        دیگر» دارند و لینک‌هایشان شبیه لینک قسمت‌های همین سریال است؛
+        بدون این چک، لینک دانلود سریال‌های دیگر به قسمت‌های این سریال
+        می‌چسبید. تعلق با IMDb یا آمدن همه‌ی واژه‌های عنوان (فارسی یا
+        انگلیسی) در آدرس/متن صفحه سنجیده می‌شود.
+        """
+        if not is_series:
+            return True
+        if imdb_id and imdb_id.lower() in f"{page_url} {page_html}".lower():
+            return True
+        haystack = _normalize(f"{unquote(page_url)} {_strip_tags(page_html)}")
+        return any(
+            tokens and all(token in haystack for token in tokens)
+            for tokens in (en_tokens, fa_tokens)
+        )
+
+    def episode_candidate_priority(candidate):
+        # صفحه‌هایی که اسلاگشان عنوان همین سریال را دارد اول دنبال شوند؛
+        # لینک‌های ستون کناری (سریال‌های دیگر) ته صف می‌مانند.
+        url = candidate[0]
+        slug = _normalize(unquote(url))
+        if imdb_id and imdb_id.lower() in url.lower():
+            return 0
+        return 0 if any(
+            tokens and all(token in slug for token in tokens)
+            for tokens in (en_tokens, fa_tokens)
+        ) else 1
+
     all_links = []
     fetched = set(pages)
     for page_url in pages:
@@ -624,18 +658,37 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
             logger.warning("download source page failed: %s", page_url, exc_info=True)
             continue
         fetched.add(final_url)
-        links = extract_download_links(html, final_url)
+        # اگر صفحه‌ی پیداشده اصلاً مال این سریال نیست (مثلاً صفحه‌ی فهرست
+        # آثار)، لینک‌های مستقیمش به این سریال نمی‌چسبند؛ صفحه‌های قسمت
+        # از رویش همچنان دنبال می‌شوند ولی تک‌تک راستی‌آزمایی خواهند شد.
+        links = (
+            extract_download_links(html, final_url)
+            if page_belongs_to_series(html, final_url)
+            else []
+        )
         if is_series:
             # لینک دانلود سریال روی قسمت‌هاست و معمولاً هر قسمت صفحه‌ی جدا
             # دارد؛ صفحه‌ی هر قسمت دنبال می‌شود و لینک‌هایش با شماره‌ی
             # همان قسمت (از لینک ارجاع‌دهنده) برچسب می‌خورند.
-            for ep_url, ep_season, ep_episode in _episode_page_candidates(html, final_url):
+            foreign_pages = 0
+            candidates = sorted(
+                _episode_page_candidates(html, final_url),
+                key=episode_candidate_priority,
+            )
+            for ep_url, ep_season, ep_episode in candidates:
                 if ep_url in fetched:
                     continue
                 fetched.add(ep_url)
                 try:
                     sub_html, sub_final = fetch_html(session, ep_url)
                 except Exception:
+                    continue
+                if not page_belongs_to_series(sub_html, sub_final):
+                    # به‌احتمال زیاد لینک ستون کناریِ سریال دیگری است؛ بعد
+                    # از چند مورد از این‌ها دیگر ادامه نمی‌دهیم.
+                    foreign_pages += 1
+                    if foreign_pages >= 8:
+                        break
                     continue
                 sub_links = extract_download_links(sub_html, sub_final)
                 if not sub_links:
@@ -647,6 +700,8 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
                         try:
                             dl_html, dl_final = fetch_html(session, dl_url)
                         except Exception:
+                            continue
+                        if not page_belongs_to_series(dl_html, dl_final):
                             continue
                         sub_links.extend(extract_download_links(dl_html, dl_final))
                         if sub_links:
@@ -670,6 +725,8 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
                 try:
                     sub_html, sub_final = fetch_html(session, sub_url)
                 except Exception:
+                    continue
+                if not page_belongs_to_series(sub_html, sub_final):
                     continue
                 links.extend(extract_download_links(sub_html, sub_final))
                 if links and not is_series:
