@@ -1354,3 +1354,152 @@ class SeriesForeignLinksTest(TestCase):
             {d.url for d in self._downloads_of(self.ep1)},
             {"https://dl.example.com/files/opaque-881.mkv"},
         )
+
+
+# ---------------------------------------------------------------------------
+# مقاوم‌سازی پیدا کردن لینک قسمت‌ها: تطابق بخشی عنوان (اسلاگ کوتاه‌تر)،
+# لینک قسمت با متنِ عنوان قسمت زیر همان اسلاگ، و شمردن فقط قسمت‌های موجود
+# ---------------------------------------------------------------------------
+PARTIAL_SERIES_HTML = """<html><body>
+<h1>Test Show</h1>
+<a href="https://dl.example.com/episode/test-show-ep1/">دانلود قسمت ۱</a>
+</body></html>"""
+
+PARTIAL_EP_HTML = """<html><body>
+<h1>Test Show</h1>
+<a href="https://dl.example.com/files/partial-101.mkv">دانلود 720p</a>
+</body></html>"""
+
+TITLE_ONLY_SERIES_HTML = """<html><body>
+<h1>Test Show</h1>
+<a href="https://dl.example.com/show/test-show/1/">Pilot</a>
+</body></html>"""
+
+TITLE_ONLY_EP_HTML = """<html><body>
+<h1>Test Show قسمت ۱</h1>
+<a href="https://dl.example.com/files/opaque-901.mkv">دانلود 720p</a>
+</body></html>"""
+
+FUTURE_EP_SERIES_HTML = """<html><body>
+<h1>Test Show</h1>
+<a href="https://dl.example.com/files/Test.Show.S01E01.720p.mkv">دانلود قسمت ۱</a>
+<a href="https://dl.example.com/files/Test.Show.S01E09.720p.mkv">دانلود قسمت ۹</a>
+</body></html>"""
+
+
+class SeriesLinkFindingRobustnessTest(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+
+        from series.models import Episode, Season, Series
+
+        cache.clear()
+        settings_obj = AgentSettings.load()
+        settings_obj.translate_with_ai = False
+        settings_obj.fetch_downloads = True
+        settings_obj.download_source_url = "https://dl.example.com"
+        settings_obj.save()
+        self.Series = Series
+        self.show = Series.objects.create(
+            title="سریال تستی", original_title="Test Show",
+            imdb_id="tt9990101", tmdb_id=999101,
+        )
+        season = Season.objects.create(series=self.show, season_number=1)
+        self.ep1 = Episode.objects.create(season=season, episode_number=1)
+        self.ep2 = Episode.objects.create(season=season, episode_number=2)
+
+    def _downloads_of(self, obj):
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+
+        ct = ContentType.objects.get_for_model(obj.__class__)
+        return Download.objects.filter(content_type=ct, object_id=obj.id)
+
+    def _fetch_with(self, fake):
+        with patch("content_agent.download_source.fetch_html", side_effect=fake):
+            return ContentAgent().fetch_downloads_for(self.show, "series")
+
+    def test_partial_title_match_pages_accepted(self):
+        # عنوان کامل TMDB سه واژه دارد ولی سایت با نام کوتاه‌تر می‌شناسد؛
+        # صفحه‌های واقعی نباید به‌خاطر نبودن یک واژه رد شوند.
+        from series.models import Episode, Season
+
+        show = self.Series.objects.create(
+            title="سریال برگشته", original_title="Test Show Returns",
+            imdb_id="tt9990301", tmdb_id=999301,
+        )
+        season = Season.objects.create(series=show, season_number=1)
+        ep1 = Episode.objects.create(season=season, episode_number=1)
+
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            if "test-show-ep1" in url:
+                return PARTIAL_EP_HTML, url
+            return PARTIAL_SERIES_HTML, url
+
+        with patch("content_agent.download_source.fetch_html", side_effect=fake):
+            summary = ContentAgent().fetch_downloads_for(show, "series")
+        self.assertEqual(summary["found"], 1)
+        self.assertEqual(
+            {d.url for d in self._downloads_of(ep1)},
+            {"https://dl.example.com/files/partial-101.mkv"},
+        )
+
+    def test_episode_title_anchor_in_slug_family_followed(self):
+        # متن لینک فقط عنوان قسمت است («Pilot») و در آدرسش هم کلمه‌ی
+        # episode/قسمت نیست؛ چون زیر اسلاگ خود سریال است دنبال می‌شود.
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            if url.rstrip("/").endswith("test-show/1"):
+                return TITLE_ONLY_EP_HTML, url
+            return TITLE_ONLY_SERIES_HTML, url
+
+        summary = self._fetch_with(fake)
+        self.assertEqual(summary["found"], 1)
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep1)},
+            {"https://dl.example.com/files/opaque-901.mkv"},
+        )
+
+    def test_found_counts_only_existing_episodes(self):
+        # قسمت ۹ در سایت دانلود هست ولی در سایت ما وارد نشده؛ نباید سریال
+        # را «دارای لینک» حساب کند.
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            return FUTURE_EP_SERIES_HTML, url
+
+        summary = self._fetch_with(fake)
+        self.assertEqual(summary["found"], 1)
+        self.assertEqual(self._downloads_of(self.ep1).count(), 1)
+        from downloads.models import Download
+
+        self.assertEqual(Download.objects.count(), 1)
+
+    def test_attach_seasonless_episode_number_unique_match(self):
+        from content_agent import download_source
+        from series.models import Episode, Season
+
+        season2 = Season.objects.create(series=self.show, season_number=2)
+        ep_s2_1 = Episode.objects.create(season=season2, episode_number=1)
+        ep_s2_5 = Episode.objects.create(season=season2, episode_number=5)
+        created = download_source.attach_downloads(self.show, "series", [
+            {"url": "https://dl.example.com/files/s2e5.mkv", "title": "",
+             "quality": "720p", "size": "", "language": "original",
+             "subtitle": False, "season": None, "episode": 5},
+            {"url": "https://dl.example.com/files/ambig.mkv", "title": "",
+             "quality": "720p", "size": "", "language": "original",
+             "subtitle": False, "season": None, "episode": 1},
+        ])
+        # قسمت ۵ فقط در فصل ۲ هست → وصل شد؛ قسمت ۱ در هر دو فصل هست و
+        # بدون فصل حدس زده نمی‌شود → وصل نشد.
+        self.assertEqual(created, 1)
+        self.assertEqual(
+            {d.url for d in self._downloads_of(ep_s2_5)},
+            {"https://dl.example.com/files/s2e5.mkv"},
+        )
+        self.assertEqual(self._downloads_of(ep_s2_1).count(), 0)
+        self.assertEqual(self._downloads_of(self.ep1).count(), 0)

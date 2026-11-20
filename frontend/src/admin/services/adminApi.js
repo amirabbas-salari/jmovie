@@ -91,6 +91,9 @@ export const downloadsApi = {
   ...crud("/admin/downloads/"),
   // حذف همه‌ی ردیف‌هایی که دقیقاً یک آدرس مشخص دارند (مثلاً لینک خراب/تکراری)
   deleteByUrl: async (url) => (await api.post("/admin/downloads/delete-by-url/", { url })).data,
+  // لینک‌های یتیم: دانلودهایی که هدفشان (فیلم/قسمت/...) حذف شده است
+  orphansCount: async () => (await api.get("/admin/downloads/orphans-count/")).data,
+  purgeOrphans: async () => (await api.post("/admin/downloads/purge-orphans/", {})).data,
 }
 export const commentsApi = {
   ...crud("/admin/comments/"),

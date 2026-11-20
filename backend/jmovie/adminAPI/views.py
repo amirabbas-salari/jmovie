@@ -761,6 +761,8 @@ class AdminDownloadViewSet(AdminModelViewSet):
     ordering_fields = ["id", "created_at", "quality"]
     extra_action_permissions = {
         "delete_by_url": "downloads.delete_download",
+        "orphans_count": "downloads.view_download",
+        "purge_orphans": "downloads.delete_download",
     }
 
     def get_queryset(self):
@@ -806,6 +808,42 @@ class AdminDownloadViewSet(AdminModelViewSet):
             self._log(request, AdminAuditLog.ACTION_DELETE, instance)
         Download.objects.filter(id__in=[m.id for m in matches]).delete()
         return Response({"deleted": len(matches), "url": url})
+
+    def _orphan_downloads(self):
+        """دانلودهایی که هدفشان (فیلم/سریال/فصل/قسمت) دیگر وجود ندارد.
+
+        رابطه‌ی دانلود Generic است و با حذف هدف پاک نمی‌شود؛ این ردیف‌های
+        یتیم روی سایت نمایش داده نمی‌شوند ولی جدول و پنل را شلوغ می‌کنند
+        (مثلاً وقتی سریالی با لینک‌های اشتباه حذف و دوباره اضافه شود).
+        """
+        orphan_ids = []
+        used_ct_ids = (
+            Download.objects.values_list("content_type_id", flat=True).distinct()
+        )
+        for ct in ContentType.objects.filter(id__in=used_ct_ids):
+            rows = Download.objects.filter(content_type=ct)
+            model = ct.model_class()
+            if model is None:
+                orphan_ids.extend(rows.values_list("id", flat=True))
+                continue
+            existing_ids = model.objects.values_list("id", flat=True)
+            orphan_ids.extend(
+                rows.exclude(object_id__in=existing_ids).values_list("id", flat=True)
+            )
+        return Download.objects.filter(id__in=orphan_ids)
+
+    @action(detail=False, methods=["get"], url_path="orphans-count")
+    def orphans_count(self, request):
+        return Response({"count": self._orphan_downloads().count()})
+
+    @action(detail=False, methods=["post"], url_path="purge-orphans")
+    def purge_orphans(self, request):
+        """همه‌ی لینک‌های یتیم را یکجا حذف می‌کند (با لاگ برای هر ردیف)."""
+        orphans = list(self._orphan_downloads().order_by("id"))
+        for instance in orphans:
+            self._log(request, AdminAuditLog.ACTION_DELETE, instance)
+        Download.objects.filter(id__in=[o.id for o in orphans]).delete()
+        return Response({"deleted": len(orphans)})
 
 
 class AdminCommentViewSet(AdminModelViewSet):
