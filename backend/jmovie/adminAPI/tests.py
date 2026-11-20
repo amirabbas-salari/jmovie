@@ -636,3 +636,73 @@ class AdminImportExportTest(TestCase):
         )
         self.assertEqual(res.status_code, 403)
         self.assertFalse(Movie.objects.filter(imdb_id="tt8000030").exists())
+
+
+class AdminEpisodeDownloadCrudTest(TestCase):
+    """رگرسیون: ویرایش/حذف لینک دانلودِ قسمت سریال از API ادمین.
+
+    لینک‌های دانلود سریال روی قسمت‌ها هستند؛ پنل باید بتواند همان‌طور که
+    لینک فیلم را ویرایش/حذف می‌کند، لینک قسمت را هم با content_type=episode
+    ویرایش و حذف کند.
+    """
+
+    def setUp(self):
+        from django.contrib.contenttypes.models import ContentType
+
+        from downloads.models import Download
+        from series.models import Episode, Season, Series
+
+        self.client = APIClient()
+        self.superadmin = make_user("dlroot", is_staff=True, is_superuser=True)
+        self.client.force_authenticate(user=self.superadmin)
+
+        self.series = Series.objects.create(title="سریال تست", imdb_id="tt2000001")
+        season = Season.objects.create(series=self.series, season_number=1)
+        self.episode = Episode.objects.create(season=season, episode_number=1, title="قسمت اول")
+        ep_ct = ContentType.objects.get_for_model(Episode)
+        self.download = Download.objects.create(
+            content_type=ep_ct, object_id=self.episode.id,
+            quality="720p", language="original", url="https://dl.example.com/ep1-720.mkv",
+        )
+
+    def test_list_filters_episode_downloads(self):
+        res = self.client.get(
+            "/admin/downloads/",
+            {"target_type": "episode", "object_id": self.episode.id},
+        )
+        self.assertEqual(res.status_code, 200)
+        results = res.data["results"] if "results" in res.data else res.data
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["id"], self.download.id)
+        self.assertEqual(results[0]["target_type"], "episode")
+
+    def test_update_episode_download(self):
+        res = self.client.patch(
+            f"/admin/downloads/{self.download.id}/",
+            {
+                "content_type": "episode",
+                "object_id": self.episode.id,
+                "quality": "1080p BluRay",
+                "url": "https://dl.example.com/ep1-1080.mkv",
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.download.refresh_from_db()
+        self.assertEqual(self.download.quality, "1080p BluRay")
+        self.assertEqual(self.download.url, "https://dl.example.com/ep1-1080.mkv")
+        # هدف هنوز همان قسمت است، نه خود سریال
+        self.assertEqual(self.download.object_id, self.episode.id)
+        self.assertEqual(self.download.content_type.model, "episode")
+
+    def test_delete_episode_download(self):
+        from downloads.models import Download
+
+        res = self.client.delete(f"/admin/downloads/{self.download.id}/")
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(Download.objects.filter(id=self.download.id).exists())
+        # خود قسمت و سریال دست‌نخورده می‌مانند
+        from series.models import Episode, Series
+
+        self.assertTrue(Episode.objects.filter(id=self.episode.id).exists())
+        self.assertTrue(Series.objects.filter(id=self.series.id).exists())

@@ -10,7 +10,9 @@
      دوروبرشان کیفیت/حجم/زیرنویس/دوبله و شماره‌ی فصل/قسمت خوانده می‌شود.
      اگر در صفحه‌ی اثر لینک مستقیمی نباشد، دکمه‌ی «دانلود» تا یک سطح
      دنبال می‌شود (صفحه‌ی دانلود جدا).
-  ۳) لینک‌ها به خود اثر (فیلم/سریال) یا قسمت درست سریال وصل می‌شوند.
+  ۳) لینک‌ها برای فیلم به خود فیلم و برای سریال فقط به قسمت درست وصل
+     می‌شوند؛ لینک بی‌قسمت (مثل تریلر) دانلود سریال حساب نمی‌شود و
+     صفحه‌های جدا‌ی قسمت‌ها هم دنبال می‌شوند.
 
 هیچ ساختار خاصی از سایت فرض نمی‌شود؛ اگر صفحه‌ای پیدا نشود یا لینکی
 نباشد، نتیجه‌ی خالی برمی‌گردد و واردکردن اثر از TMDB متوقف نمی‌شود.
@@ -36,6 +38,8 @@ BROWSER_HEADERS = {
 }
 TIMEOUT = 20
 MAX_CANDIDATE_PAGES = 2
+# سقف صفحه‌های جدا‌ی قسمت‌ها که برای یک سریال دنبال می‌شود
+MAX_EPISODE_PAGES = 100
 
 MEDIA_EXTENSIONS = (".mkv", ".mp4", ".avi", ".mov", ".wmv", ".zip", ".rar", ".7z")
 SKIP_HREF_PARTS = (
@@ -193,11 +197,73 @@ def _dubbed_subtitled(text):
     return bool(DUBBED_RE.search(text or "")), subtitled
 
 
-FA_SEASON_EPISODE_RE = re.compile(r"فصل\s*(\d{1,2})\s*قسمت\s*(\d{1,3})")
 EN_SEASON_EPISODE_RE = re.compile(r"season\s*(\d{1,2})\D{0,12}episode\s*(\d{1,3})", re.I)
 
+# لینک تریلر/تیزر «لینک دانلود» نیست؛ روی خیلی از سایت‌ها تنها فایل ویدیوییِ
+# صفحه‌ی سریال همان تریلر است و اگر فیلتر نشود ایجنت فقط تریلر را برمی‌دارد.
+TRAILER_RE = re.compile(r"trailer|teaser|تریلر|تیزر|آنونس|پیش.?نمایش", re.I)
 
-def _make_link(url, text, context):
+
+def _is_trailer_link(url, text=""):
+    low_url = unquote(url or "").lower().replace("-", " ").replace("_", " ").replace(".", " ")
+    if "trailer" in low_url or "teaser" in low_url:
+        return True
+    return bool(TRAILER_RE.search(text or ""))
+
+
+# شماره‌های حروفی فارسی برای «قسمت اول»، «فصل دوم» و مانند آن
+FA_ORDINALS = {
+    "اول": 1, "نخست": 1, "دوم": 2, "سوم": 3, "چهارم": 4, "پنجم": 5,
+    "ششم": 6, "هفتم": 7, "هشتم": 8, "نهم": 9, "دهم": 10,
+    "یازدهم": 11, "دوازدهم": 12, "سیزدهم": 13, "چهاردهم": 14, "پانزدهم": 15,
+    "شانزدهم": 16, "هفدهم": 17, "هجدهم": 18, "نوزدهم": 19, "بیستم": 20,
+}
+_FA_NUM = r"\d{1,3}|" + "|".join(sorted(FA_ORDINALS, key=len, reverse=True))
+
+
+def _fa_number(token):
+    token = (token or "").strip()
+    if token.isdigit():
+        return int(token)
+    return FA_ORDINALS.get(token)
+
+
+def _season_episode_of(text):
+    """(فصل, قسمت) را از یک متن/آدرس می‌خواند؛ هر جزء می‌تواند None باشد.
+
+    الگوها: ‎S01E02‎، «فصل ۲ قسمت ۵»، «قسمت اول»، season/episode انگلیسی.
+    """
+    t = _en_digits(text or "").replace("‌", " ").replace("ي", "ی").replace("ك", "ک")
+    t = re.sub(r"\s+", " ", t)
+    m = EPISODE_RE.search(t)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    m = re.search(r"فصل\s*(" + _FA_NUM + r")\s*قسمت\s*(" + _FA_NUM + r")", t)
+    if m:
+        return _fa_number(m.group(1)), _fa_number(m.group(2))
+    m = EN_SEASON_EPISODE_RE.search(t)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    episode = None
+    m = re.search(r"قسمت\s*(" + _FA_NUM + r")", t)
+    if m:
+        episode = _fa_number(m.group(1))
+    else:
+        m = EPISODE_ONLY_RE.search(t)
+        if m:
+            episode = int(m.group(1))
+    season = None
+    m = re.search(r"فصل\s*(" + _FA_NUM + r")", t)
+    if m:
+        season = _fa_number(m.group(1))
+    else:
+        m = re.search(r"\bseason\s*(\d{1,2})", t, re.I)
+        if m:
+            season = int(m.group(1))
+    return season, episode
+
+
+def _make_link(url, text, context, pre_context=""):
     # اسم فایل داخل URL مطمئن‌ترین منبع کیفیت/دوبله است؛ بعد متن خود لینک
     # و بعد متن دوروبر آن (برچسب‌های قبل و بعد از لینک در همان باکس/ردیف).
     url_text = _en_digits(unquote(url)).replace(".", " ").replace("_", " ").replace("-", " ")
@@ -211,18 +277,18 @@ def _make_link(url, text, context):
     combined = f"{url_text} {meta_text}"
     dubbed, subtitled = _dubbed_subtitled(combined)
 
+    # شماره‌ی قسمت به ترتیب اطمینان: اسم فایل، متن لینک، برچسبِ قبل از لینک.
+    # متنِ بعد از لینک عمداً اینجا نیست؛ در فهرست‌های گروهی معمولاً برچسب
+    # ردیف بعدی است و لینک را به قسمت اشتباه می‌چسباند (در extract، اگر
+    # هیچ‌کدام نبود، با احتیاط سراغش می‌رویم).
     season = episode = None
-    episode_match = (
-        EPISODE_RE.search(combined)
-        or FA_SEASON_EPISODE_RE.search(meta_text)
-        or EN_SEASON_EPISODE_RE.search(combined)
-    )
-    if episode_match:
-        season, episode = int(episode_match.group(1)), int(episode_match.group(2))
-    else:
-        ep_only = EPISODE_ONLY_RE.search(meta_text) or EPISODE_ONLY_RE.search(url_text)
-        if ep_only:
-            episode = int(ep_only.group(1))
+    for probe in (url_text, _en_digits(text or ""), pre_context):
+        s, e = _season_episode_of(probe)
+        if season is None and s is not None:
+            season = s
+        if e is not None:
+            episode = e
+            break
 
     size_match = SIZE_RE.search(meta_text)
     return {
@@ -255,13 +321,34 @@ def extract_download_links(html, page_url):
     links = []
     seen = set()
 
-    def add(url, text, context):
+    def add(url, text, context, cur_season=None, cur_episode=None,
+            pre_context="", post_context=""):
         if url in seen:
             return
         seen.add(url)
-        links.append(_make_link(url, text, context))
+        link = _make_link(url, text, context, pre_context=pre_context)
+        # در فهرست‌های گروهی («قسمت ۳:» و بعد چند کیفیت پشت سر هم) فقط لینک
+        # اول شماره‌ی قسمت را در متن دوروبرش دارد؛ شماره از برچسب ردیف به
+        # بقیه‌ی لینک‌های همان ردیف هم می‌رسد.
+        if link.get("episode") is None and cur_episode is not None:
+            link["episode"] = cur_episode
+            if link.get("season") is None:
+                link["season"] = cur_season
+        elif link.get("episode") is None and post_context:
+            # آخرین شانس: برچسب بعد از لینک («دانلود» قسمت ۳)؛ فقط وقتی
+            # داخل ردیفِ برچسب‌دار نیستیم، چون آنجا برچسبِ ردیف بعدی است.
+            s_post, e_post = _season_episode_of(post_context)
+            if e_post is not None:
+                link["episode"] = e_post
+                if link.get("season") is None:
+                    link["season"] = s_post
+        if link.get("season") is None and cur_season is not None:
+            link["season"] = cur_season
+        links.append(link)
 
     spans = _anchor_spans(html)
+    current_season = None
+    current_episode = None
     for i, (href, text, start, end) in enumerate(spans):
         if not href or href.startswith("#"):
             continue
@@ -274,12 +361,27 @@ def extract_download_links(html, page_url):
         prev_end = spans[i - 1][3] if i else max(0, start - 800)
         next_start = spans[i + 1][2] if i + 1 < len(spans) else min(len(html), end + 800)
         context = _strip_tags(html[prev_end:next_start])
+        # برچسب ردیف («فصل ۲» / «قسمت ۵:») درست قبل از لینک‌های همان ردیف
+        # می‌آید؛ برای لینک‌های بعدیِ ردیف نگهش می‌داریم.
+        pre_text = _strip_tags(html[prev_end:start])
+        post_text = _strip_tags(html[end:next_start])
+        s_mark, e_mark = _season_episode_of(pre_text[-150:])
+        if e_mark is not None:
+            current_episode = e_mark
+            if s_mark is not None:
+                current_season = s_mark
+        elif s_mark is not None:
+            current_season = s_mark
+            current_episode = None
+        if _is_trailer_link(absolute, text):
+            continue
         if not _is_download_href(absolute):
             if "/download" not in absolute.lower() and not QUALITY_RE.search(f"{text} {context}"):
                 continue
             if len(text) < 3 and not QUALITY_RE.search(context):
                 continue
-        add(absolute, text, context)
+        add(absolute, text, context, current_season, current_episode,
+            pre_context=pre_text[-150:], post_context=post_text)
 
     # بعضی سایت‌ها لینک فایل را به‌صورت متن خام یا در اسکریپت/اتریبیوت می‌گذارند
     for match in URL_RE.finditer(html):
@@ -288,8 +390,10 @@ def extract_download_links(html, page_url):
             continue
         if any(part in url.lower() for part in SKIP_HREF_PARTS):
             continue
+        if _is_trailer_link(url):
+            continue
         context = _strip_tags(html[max(0, match.start() - 300): match.end() + 300])
-        add(url, "", context)
+        add(url, "", context, pre_context=context)
     return links
 
 
@@ -306,10 +410,51 @@ def _download_page_candidates(html, page_url):
             continue
         if parsed.path.lower().endswith(MEDIA_EXTENSIONS):
             continue
+        if _is_trailer_link(absolute, text):
+            continue
         if "دانلود" in text or "download" in text.lower() or "/download" in absolute.lower():
             if absolute not in out:
                 out.append(absolute)
         if len(out) >= MAX_CANDIDATE_PAGES:
+            break
+    return out
+
+
+def _episode_page_candidates(html, page_url):
+    """[(url, season, episode)] صفحه‌های جدا‌ی هر قسمت برای دنبال‌کردن.
+
+    در سایت‌های دانلود، صفحه‌ی سریال معمولاً برای هر قسمت یک دکمه/لینک
+    جدا دارد («دانلود قسمت ۳») که لینک‌های مستقیم داخل صفحه‌ی خود قسمت‌اند.
+    شماره‌ی فصل/قسمت از متن یا آدرس همان لینک خوانده می‌شود تا لینک‌های
+    صفحه‌ی قسمت (که اغلب اسم مبهم دارند) به قسمت درست وصل شوند.
+    """
+    host = urlparse(page_url).netloc
+    out = []
+    seen = set()
+    for href, text, tail in _anchors(html):
+        if not href or href.startswith("#"):
+            continue
+        absolute = urljoin(page_url, href)
+        parsed = urlparse(absolute)
+        if parsed.netloc and parsed.netloc != host:
+            continue
+        if parsed.path.lower().endswith(MEDIA_EXTENSIONS):
+            continue
+        if _is_trailer_link(absolute, text):
+            continue
+        label = f"{text} {tail}"
+        season, episode = _season_episode_of(f"{unquote(absolute)} {label}")
+        looks_episode = (
+            episode is not None
+            or "قسمت" in label
+            or "episode" in label.lower()
+            or "/episode" in parsed.path.lower()
+        )
+        if not looks_episode or absolute in seen:
+            continue
+        seen.add(absolute)
+        out.append((absolute, season, episode))
+        if len(out) >= MAX_EPISODE_PAGES:
             break
     return out
 
@@ -415,18 +560,24 @@ def attach_downloads(media, media_type, links):
     seasons_present = {s for s, _e in episode_index}
 
     def target_for(link):
-        if is_series and link.get("episode"):
-            season_no = link.get("season")
-            if season_no is None and len(seasons_present) == 1:
-                season_no = next(iter(seasons_present))
-            episode = episode_index.get((season_no, link["episode"]))
-            if episode is not None:
-                return episode
+        if is_series:
+            # لینک دانلود سریال متعلق به قسمت‌هاست، نه خود سریال: لینکی که
+            # به قسمت مشخصی نمی‌رسد (مثل تریلر یا لینک کلی صفحه) وصل نمی‌شود.
+            if link.get("episode"):
+                season_no = link.get("season")
+                if season_no is None and len(seasons_present) == 1:
+                    season_no = next(iter(seasons_present))
+                episode = episode_index.get((season_no, link["episode"]))
+                if episode is not None:
+                    return episode
+            return None
         return media
 
     created = 0
     for link in links:
         target = target_for(link)
+        if target is None:
+            continue
         content_type = ContentType.objects.get_for_model(target.__class__)
         values = {
             "title": link.get("title") or "",
@@ -459,37 +610,85 @@ def attach_downloads(media, media_type, links):
 def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title="", title="", year=None):
     """جریان کامل: پیدا کردن صفحه → استخراج لینک → وصل‌کردن. خلاصه برمی‌گرداند."""
     session = _session()
+    is_series = media_type in ("series", "tv")
     pages = find_title_pages(
         session, base_url,
         imdb_id=imdb_id, original_title=original_title, title=title, year=year,
     )
     all_links = []
+    fetched = set(pages)
     for page_url in pages:
         try:
             html, final_url = fetch_html(session, page_url)
         except Exception:
             logger.warning("download source page failed: %s", page_url, exc_info=True)
             continue
+        fetched.add(final_url)
         links = extract_download_links(html, final_url)
-        if not links:
-            # صفحه‌ی اثر گاهی فقط دکمه‌ی «دانلود» دارد و لینک‌ها صفحه‌ی جدا هستند
+        if is_series:
+            # لینک دانلود سریال روی قسمت‌هاست و معمولاً هر قسمت صفحه‌ی جدا
+            # دارد؛ صفحه‌ی هر قسمت دنبال می‌شود و لینک‌هایش با شماره‌ی
+            # همان قسمت (از لینک ارجاع‌دهنده) برچسب می‌خورند.
+            for ep_url, ep_season, ep_episode in _episode_page_candidates(html, final_url):
+                if ep_url in fetched:
+                    continue
+                fetched.add(ep_url)
+                try:
+                    sub_html, sub_final = fetch_html(session, ep_url)
+                except Exception:
+                    continue
+                sub_links = extract_download_links(sub_html, sub_final)
+                if not sub_links:
+                    # صفحه‌ی قسمت هم ممکن است فقط دکمه‌ی «دانلود» داشته باشد
+                    for dl_url in _download_page_candidates(sub_html, sub_final):
+                        if dl_url in fetched:
+                            continue
+                        fetched.add(dl_url)
+                        try:
+                            dl_html, dl_final = fetch_html(session, dl_url)
+                        except Exception:
+                            continue
+                        sub_links.extend(extract_download_links(dl_html, dl_final))
+                        if sub_links:
+                            break
+                for link in sub_links:
+                    if link.get("episode") is None and ep_episode is not None:
+                        link["episode"] = ep_episode
+                        if link.get("season") is None:
+                            link["season"] = ep_season
+                    elif link.get("season") is None and ep_season is not None:
+                        link["season"] = ep_season
+                    links.append(link)
+        if not links or is_series:
+            # صفحه‌ی اثر گاهی فقط دکمه‌ی «دانلود» دارد و لینک‌ها صفحه‌ی جدا
+            # هستند؛ برای سریال این صفحه (فهرست همه‌ی قسمت‌ها) حتی وقتی روی
+            # صفحه‌ی اصلی چند لینک هست هم دنبال می‌شود.
             for sub_url in _download_page_candidates(html, final_url):
+                if sub_url in fetched:
+                    continue
+                fetched.add(sub_url)
                 try:
                     sub_html, sub_final = fetch_html(session, sub_url)
                 except Exception:
                     continue
                 links.extend(extract_download_links(sub_html, sub_final))
-                if links:
+                if links and not is_series:
                     break
         all_links.extend(links)
-    # حذف تکراری بین صفحه‌ها
-    unique = {link["url"]: link for link in all_links}
+    # حذف تکراری بین صفحه‌ها؛ آدرس صفحه‌هایی که دنبال شدند (صفحه‌ی قسمت یا
+    # دانلود) خودش «لینک دانلود» نیست، هرچند روی هاست dl.* استخراج شده باشد.
+    unique = {link["url"]: link for link in all_links if link["url"] not in fetched}
+    if is_series:
+        # برای سریال فقط لینکِ رسیده به قسمت مشخص شمرده می‌شود؛ لینک
+        # بی‌قسمت (تریلر و مانند آن) «لینک دانلود سریال» حساب نمی‌شود.
+        unique = {url: link for url, link in unique.items() if link.get("episode")}
     created = attach_downloads(media, media_type, list(unique.values())) if unique else 0
     result = {"pages": len(pages), "found": len(unique), "created": created}
     if not unique:
-        result["reason"] = (
-            "صفحه‌ی این اثر در سایت دوم پیدا نشد؛ جستجو با IMDb و عنوان (انگلیسی و فارسی) نتیجه‌ای نداشت."
-            if not pages
-            else "صفحه‌ی اثر در سایت دوم پیدا شد، اما لینک دانلودی از آن خوانده نشد."
-        )
+        if not pages:
+            result["reason"] = "صفحه‌ی این اثر در سایت دوم پیدا نشد؛ جستجو با IMDb و عنوان (انگلیسی و فارسی) نتیجه‌ای نداشت."
+        elif is_series:
+            result["reason"] = "صفحه‌ی سریال در سایت دوم پیدا شد، اما لینک دانلود قسمت‌هایش خوانده نشد."
+        else:
+            result["reason"] = "صفحه‌ی اثر در سایت دوم پیدا شد، اما لینک دانلودی از آن خوانده نشد."
     return result

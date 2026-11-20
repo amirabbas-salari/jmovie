@@ -133,7 +133,7 @@ export function Modal({ title, onClose, children, wide }) {
       <div className={`relative max-h-[90vh] w-full ${wide ? "max-w-2xl" : "max-w-lg"} overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900 p-6 shadow-2xl`}>
         <div className="mb-5 flex items-center justify-between">
           <h3 className="font-bold text-zinc-100">{title}</h3>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/10" aria-label="بستن">
+          <button type="button" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 hover:bg-white/10" aria-label="بستن">
             <X className="h-4 w-4" />
           </button>
         </div>
