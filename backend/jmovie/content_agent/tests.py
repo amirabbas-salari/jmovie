@@ -1503,3 +1503,64 @@ class SeriesLinkFindingRobustnessTest(TestCase):
         )
         self.assertEqual(self._downloads_of(ep_s2_1).count(), 0)
         self.assertEqual(self._downloads_of(self.ep1).count(), 0)
+
+
+# ---------------------------------------------------------------------------
+# هویت ساختاری صفحه: اسلاگ/تیتر، نه متن بدنه.
+# رگرسیون: (الف) صفحه‌ی قسمت تیترش فقط نام کوتاه سایت را دارد و نام کامل
+# فقط در ستون کناری است -> روی متن بدنه قبول می‌شد ولی روی تیتر نباید
+# وابسته به ستون کناری باشد؛ اسلاگ خود سریال در آدرس، تعلق را ثابت می‌کند.
+# (ب) ستون کناریِ پر از لینک قسمت سریال‌های دیگر نباید دنبال شود.
+# ---------------------------------------------------------------------------
+STRUCT_SERIES_HTML = """<html><head><title>Test Show</title></head><body>
+<h1>Test Show</h1>
+<a href="https://dl.example.com/episode/test-show-ep1/">دانلود قسمت ۱</a>
+<a href="https://dl.example.com/episode/test-show-ep2/">دانلود قسمت ۲</a>
+<aside>
+<h2>قسمت‌های تازه</h2>
+<a href="https://dl.example.com/episode/other-show-ep1/">دانلود قسمت ۱ سریال دیگر</a>
+<a href="https://dl.example.com/episode/another-show-ep2/">دانلود قسمت ۲ سریال دیگر</a>
+</aside>
+</body></html>"""
+
+# تیتر قسمت فقط نام کوتاه/مبهم دارد؛ تعلق فقط از اسلاگ test-show فهمیده می‌شود
+STRUCT_EP1_HTML = """<html><head><title>دانلود قسمت ۱</title></head><body>
+<a href="https://dl.example.com/files/struct-111.mkv">دانلود 720p</a>
+</body></html>"""
+
+STRUCT_EP2_HTML = """<html><head><title>دانلود قسمت ۲</title></head><body>
+<a href="https://dl.example.com/files/struct-211.mkv">دانلود 720p</a>
+</body></html>"""
+
+
+def _fake_fetch_structural(_session, url):
+    if "s=" in url or "/search" in url:
+        return EP_SEARCH_HTML, url
+    if "test-show-ep1" in url:
+        return STRUCT_EP1_HTML, url
+    if "test-show-ep2" in url:
+        return STRUCT_EP2_HTML, url
+    if url.rstrip("/").endswith("test-show"):
+        return STRUCT_SERIES_HTML, url
+    raise AssertionError(f"صفحه‌ی خارجی نباید دنبال شود: {url}")
+
+
+class SeriesStructuralBelongingTest(SeriesForeignLinksTest):
+    """رگرسیون لینک‌یابی ساختاری (اسلاگ/تیتر) و حذف ستون کناری."""
+
+    @patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_structural)
+    def test_episode_pages_accepted_by_slug_not_body_text(self, _fetch):
+        summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 2)
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep1)},
+            {"https://dl.example.com/files/struct-111.mkv"},
+        )
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep2)},
+            {"https://dl.example.com/files/struct-211.mkv"},
+        )
+        from downloads.models import Download
+
+        self.assertEqual(Download.objects.count(), 2)
+        self.assertFalse(Download.objects.filter(url__icontains="Other.Show").exists())
