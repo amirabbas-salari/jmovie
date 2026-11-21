@@ -347,9 +347,12 @@ def extract_download_links(html, page_url):
         links.append(link)
 
     spans = _anchor_spans(html)
+    chrome = _chrome_flags(html, spans)
     current_season = None
     current_episode = None
     for i, (href, text, start, end) in enumerate(spans):
+        if chrome[i]:
+            continue  # ناوبری/ستون کناری/پاصفحه لینک دانلود این اثر نیست
         if not href or href.startswith("#"):
             continue
         absolute = urljoin(page_url, href)
@@ -397,11 +400,116 @@ def extract_download_links(html, page_url):
     return links
 
 
+def _heading_text(html):
+    """متن تیتر صفحه: ‎<title>‎ و تیترهای h1/h2 (نه کل بدنه).
+
+    برای سنجش تعلق صفحه به سریال فقط تیتر معتبر است؛ متن کامل بدنه پر
+    است از منو و ستون کناری که نام سریال‌های دیگر (و این سریال) در آن
+    هست و سنجش را خراب می‌کند.
+    """
+    parts = []
+    for pattern in (r"<title[^>]*>(.*?)</title>", r"<h[12][^>]*>(.*?)</h[12]>"):
+        for match in re.finditer(pattern, html or "", re.I | re.S):
+            parts.append(_strip_tags(match.group(1)))
+    return " ".join(parts)
+
+
+def _title_match(haystack_norm, en_tokens, fa_tokens):
+    """عنوان سریال (فارسی/انگلیسی) در متن نرمال‌شده هست؟
+
+    تطابق کامل، یا برای عنوان چندواژه‌ای تطابق قویِ بخشی (سایت‌ها اغلب
+    نام کوتاه‌تر می‌گذارند)؛ سریال خارجی عملاً هیچ واژه‌ی خاصی ندارد.
+    """
+    for tokens in (en_tokens, fa_tokens):
+        if not tokens:
+            continue
+        matched = sum(1 for token in tokens if token in haystack_norm)
+        if matched == len(tokens):
+            return True
+        if len(tokens) >= 3 and matched >= 2 and matched / len(tokens) >= 0.6:
+            return True
+    return False
+
+
+_PATH_GENERIC_TOKENS = {
+    "download", "series", "tv", "movie", "film", "watch", "post", "page",
+}
+
+
+def _slug_key_tokens(page_url):
+    """واژه‌های کلیدی اسلاگ صفحه‌ی سریال از آدرس خودش (مثل test-show).
+
+    قوی‌ترین نشانه‌ی تعلق صفحه‌های قسمت همین است: آدرس قسمت‌ها تقریباً
+    همیشه اسلاگ پست سریال را در خود دارد، مستقل از اینکه عنوان TMDB
+    یا نام نمایشی سایت چه باشد.
+    """
+    best = set()
+    for segment in urlparse(page_url).path.split("/"):
+        tokens = {
+            t for t in _normalize(unquote(segment)).split()
+            if len(t) >= 2 and t not in STOP_TOKENS
+            and t not in _PATH_GENERIC_TOKENS and not t.isdigit()
+        }
+        if len(tokens) > len(best):
+            best = tokens
+    return best
+
+
+_TAG_RE = re.compile(r"<(/?)([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>", re.S)
+_VOID_TAGS = {"br", "hr", "img", "input", "meta", "link", "source", "wbr"}
+_CHROME_TAGS = {"aside", "nav", "footer", "header"}
+_CHROME_HINTS = ("sidebar", "side-bar", "sidbar", "widget")
+
+
+def _chrome_flags(html, spans, use_hints=False):
+    """برای هر انکر: داخل ناوبری/ستون کناری/پاصفحه‌ی سایت هست یا نه.
+
+    لینک‌های داخل این بخش‌ها (مثل «قسمت‌های تازه‌ی سریال‌های دیگر»)
+    لینک دانلود این اثر نیستند و نباید استخراج یا دنبال شوند.
+    """
+    flags = [False] * len(spans)
+    if not spans:
+        return flags
+    stack = []  # [(tag, is_chrome)]
+    idx = 0
+    starts = [s[2] for s in spans]
+
+    def flag_upto(pos):
+        nonlocal idx
+        chrome = any(is_chrome for _tag, is_chrome in stack)
+        while idx < len(spans) and starts[idx] < pos:
+            flags[idx] = chrome
+            idx += 1
+
+    for match in _TAG_RE.finditer(html or ""):
+        flag_upto(match.start())
+        closing, tag, attrs = match.group(1), match.group(2).lower(), match.group(3) or ""
+        if tag in _VOID_TAGS:
+            continue
+        if closing:
+            for i in range(len(stack) - 1, -1, -1):
+                if stack[i][0] == tag:
+                    del stack[i:]
+                    break
+        elif not attrs.rstrip().endswith("/"):
+            low = attrs.lower()
+            chrome = tag in _CHROME_TAGS or (
+                use_hints and any(hint in low for hint in _CHROME_HINTS)
+            )
+            stack.append((tag, chrome))
+    flag_upto(len(html or "") + 1)
+    return flags
+
+
 def _download_page_candidates(html, page_url, limit=MAX_CANDIDATE_PAGES):
     """لینک «صفحه‌ی دانلود» جدا (دکمه‌ی دانلود) برای دنبال‌کردن یک سطح."""
     host = urlparse(page_url).netloc
     out = []
-    for href, text, _tail in _anchors(html):
+    spans = _anchor_spans(html)
+    flags = _chrome_flags(html, spans, use_hints=True)
+    for (href, text, _start, _end), in_chrome in zip(spans, flags):
+        if in_chrome:
+            continue
         if not href or href.startswith("#"):
             continue
         absolute = urljoin(page_url, href)
@@ -443,7 +551,11 @@ def _episode_page_candidates(html, page_url):
     }
     out = []
     seen = set()
-    for href, text, tail in _anchors(html):
+    spans = _anchor_spans(html)
+    flags = _chrome_flags(html, spans, use_hints=True)
+    for i, ((href, text, _start, end), in_chrome) in enumerate(zip(spans, flags)):
+        if in_chrome:
+            continue  # ستون کناری/ناوبری: قسمت‌های سریال‌های دیگر است
         if not href or href.startswith("#"):
             continue
         absolute = urljoin(page_url, href)
@@ -454,6 +566,8 @@ def _episode_page_candidates(html, page_url):
             continue
         if _is_trailer_link(absolute, text):
             continue
+        next_start = spans[i + 1][2] if i + 1 < len(spans) else end + 400
+        tail = _strip_tags(html[end:next_start])[:180]
         label = f"{text} {tail}"
         season, episode = _season_episode_of(f"{unquote(absolute)} {label}")
         href_tokens = set(_normalize(unquote(absolute)).split())
@@ -649,35 +763,34 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
     )
     en_tokens = _title_tokens(original_title)
     fa_tokens = _title_tokens(title)
+    # کلید اسلاگ از آدرس صفحه‌های پیداشده‌ی این سریال (اگر پیدا شده
+    # باشد)؛ محکم‌ترین نشانه‌ی تعلق صفحه‌های قسمت به همین سریال است،
+    # مستقل از عنوانی که TMDB دارد و نامی که سایت گذاشته.
+    slug_key = set()
+    for found_url in pages:
+        slug_key = max(slug_key, _slug_key_tokens(found_url), key=len)
 
     def page_belongs_to_series(page_html, page_url):
         """صفحه‌ی دنبال‌شده واقعاً مال همین سریال است؟
 
-        صفحه‌های سایت‌های دانلود ستون کناری «قسمت‌های تازه‌ی سریال‌های
-        دیگر» دارند و لینک‌هایشان شبیه لینک قسمت‌های همین سریال است؛
-        بدون این چک، لینک دانلود سریال‌های دیگر به قسمت‌های این سریال
-        می‌چسبید. تعلق با IMDb یا تطابق واژه‌های عنوان (فارسی/انگلیسی)
-        در آدرس/متن صفحه سنجیده می‌شود: تطابق کامل، یا برای عنوان‌های
-        چندواژه‌ای تطابق قویِ بخشی (سایت‌ها اغلب نام کوتاه‌تر می‌گذارند).
+        هویت صفحه باید ساختاری باشد، نه متن کامل بدنه: صفحه‌های سایت‌های
+        دانلود پر است از منو و ستون کناری که نام این سریال و سریال‌های
+        دیگر در آن هست؛ سنجش روی متن بدنه هم سریال خارجی را قبول می‌کند
+        هم صفحه‌ی درست را رد. پس: IMDb، یا اسلاگ خود سریال در آدرس، یا
+        تطابق عنوان در تیتر صفحه (title/h1) — اسلاگ/تیتر همیشه نام خود
+        اثر را دارد، نه نام آثار ستون کناری.
         """
         if not is_series:
             return True
-        if imdb_id and imdb_id.lower() in f"{page_url} {page_html}".lower():
+        url_norm = _normalize(unquote(page_url))
+        if imdb_id and imdb_id.lower() in url_norm.lower():
             return True
-        haystack = _normalize(f"{unquote(page_url)} {_strip_tags(page_html)}")
-        for tokens in (en_tokens, fa_tokens):
-            if not tokens:
-                continue
-            matched = sum(1 for token in tokens if token in haystack)
-            if matched == len(tokens):
-                return True
-            # اسلاگ/نام نمایشی سایت اغلب کوتاه‌تر از عنوان کامل TMDB است
-            # («rings-of-power» در برابر «The Lord of the Rings: The
-            # Rings of Power»)؛ تطابق قویِ بخشی هم قبول است. سریال خارجی
-            # عملاً هیچ‌یک از واژه‌های خاص این عنوان را ندارد و رد می‌شود.
-            if len(tokens) >= 3 and matched >= 2 and matched / len(tokens) >= 0.6:
-                return True
-        return False
+        if imdb_id and imdb_id.lower() in (page_html or "").lower():
+            return True
+        if slug_key and slug_key <= set(url_norm.split()):
+            return True
+        heading = _normalize(f"{url_norm} {_heading_text(page_html)}")
+        return _title_match(heading, en_tokens, fa_tokens)
 
     def episode_candidate_priority(candidate):
         # صفحه‌هایی که اسلاگشان عنوان همین سریال را دارد اول دنبال شوند؛
@@ -685,6 +798,8 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
         url = candidate[0]
         slug = _normalize(unquote(url))
         if imdb_id and imdb_id.lower() in url.lower():
+            return 0
+        if slug_key and slug_key <= set(slug.split()):
             return 0
         return 0 if any(
             tokens and all(token in slug for token in tokens)
