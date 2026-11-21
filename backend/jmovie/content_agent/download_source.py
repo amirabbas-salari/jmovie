@@ -792,6 +792,33 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
         heading = _normalize(f"{url_norm} {_heading_text(page_html)}")
         return _title_match(heading, en_tokens, fa_tokens)
 
+    def page_links_belong(links):
+        """نام فایل‌های دانلود داخل صفحه مال این سریال‌اند؟
+
+        صفحه‌ی قسمت خیلی از سایت‌ها آدرس عددی و تیتر کلی («دانلود قسمت
+        ۱») دارد؛ اما نام فایل‌های داخلش (Test.Show.S01E01.720p.mkv یا
+        مسیر .../test-show/...) نام خود سریال را دارد. این هم نشانه‌ی
+        ساختاری است: فایل سریال خارجی نام همان سریال را دارد، نه این را.
+        """
+        for link in links:
+            url_norm = _normalize(unquote(link["url"]))
+            if slug_key and slug_key <= set(url_norm.split()):
+                return True
+            if _title_match(url_norm, en_tokens, fa_tokens):
+                return True
+        return False
+
+    # شمارنده‌های مرحله‌ای؛ تا وقتی «هیچ لینکی پیدا نشد» دقیقاً معلوم
+    # باشد لینک‌ها در کدام مرحله حذف شده‌اند و پیام خطا همان را بگوید.
+    stats = {
+        "series_pages_accepted": 0,
+        "episode_candidates": 0,
+        "episode_pages_accepted": 0,
+        "episode_pages_rejected": 0,
+        "links_extracted": 0,
+        "imported_episodes": 0,
+    }
+
     def episode_candidate_priority(candidate):
         # صفحه‌هایی که اسلاگشان عنوان همین سریال را دارد اول دنبال شوند؛
         # لینک‌های ستون کناری (سریال‌های دیگر) ته صف می‌مانند.
@@ -818,11 +845,12 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
         # اگر صفحه‌ی پیداشده اصلاً مال این سریال نیست (مثلاً صفحه‌ی فهرست
         # آثار)، لینک‌های مستقیمش به این سریال نمی‌چسبند؛ صفحه‌های قسمت
         # از رویش همچنان دنبال می‌شوند ولی تک‌تک راستی‌آزمایی خواهند شد.
-        links = (
-            extract_download_links(html, final_url)
-            if page_belongs_to_series(html, final_url)
-            else []
-        )
+        page_links = extract_download_links(html, final_url)
+        if page_belongs_to_series(html, final_url) or page_links_belong(page_links):
+            links = page_links
+            stats["series_pages_accepted"] += 1
+        else:
+            links = []
         if is_series:
             # لینک دانلود سریال روی قسمت‌هاست و معمولاً هر قسمت صفحه‌ی جدا
             # دارد؛ صفحه‌ی هر قسمت دنبال می‌شود و لینک‌هایش با شماره‌ی
@@ -832,6 +860,7 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
                 _episode_page_candidates(html, final_url),
                 key=episode_candidate_priority,
             )
+            stats["episode_candidates"] += len(candidates)
             for ep_url, ep_season, ep_episode in candidates:
                 if ep_url in fetched:
                     continue
@@ -840,14 +869,19 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
                     sub_html, sub_final = fetch_html(session, ep_url)
                 except Exception:
                     continue
-                if not page_belongs_to_series(sub_html, sub_final):
+                sub_links = extract_download_links(sub_html, sub_final)
+                if not (
+                    page_belongs_to_series(sub_html, sub_final)
+                    or page_links_belong(sub_links)
+                ):
                     # به‌احتمال زیاد لینک ستون کناریِ سریال دیگری است؛ بعد
                     # از چند مورد از این‌ها دیگر ادامه نمی‌دهیم.
+                    stats["episode_pages_rejected"] += 1
                     foreign_pages += 1
                     if foreign_pages >= 8:
                         break
                     continue
-                sub_links = extract_download_links(sub_html, sub_final)
+                stats["episode_pages_accepted"] += 1
                 if not sub_links:
                     # صفحه‌ی قسمت هم ممکن است فقط دکمه‌ی «دانلود» داشته باشد
                     for dl_url in _download_page_candidates(sub_html, sub_final):
@@ -858,9 +892,13 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
                             dl_html, dl_final = fetch_html(session, dl_url)
                         except Exception:
                             continue
-                        if not page_belongs_to_series(dl_html, dl_final):
+                        dl_links = extract_download_links(dl_html, dl_final)
+                        if not (
+                            page_belongs_to_series(dl_html, dl_final)
+                            or page_links_belong(dl_links)
+                        ):
                             continue
-                        sub_links.extend(extract_download_links(dl_html, dl_final))
+                        sub_links.extend(dl_links)
                         if sub_links:
                             break
                 for link in sub_links:
@@ -885,31 +923,59 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
                     sub_html, sub_final = fetch_html(session, sub_url)
                 except Exception:
                     continue
-                if not page_belongs_to_series(sub_html, sub_final):
+                dl_links = extract_download_links(sub_html, sub_final)
+                if not (
+                    page_belongs_to_series(sub_html, sub_final)
+                    or page_links_belong(dl_links)
+                ):
                     continue
-                links.extend(extract_download_links(sub_html, sub_final))
+                links.extend(dl_links)
                 if links and not is_series:
                     break
         all_links.extend(links)
     # حذف تکراری بین صفحه‌ها؛ آدرس صفحه‌هایی که دنبال شدند (صفحه‌ی قسمت یا
     # دانلود) خودش «لینک دانلود» نیست، هرچند روی هاست dl.* استخراج شده باشد.
     unique = {link["url"]: link for link in all_links if link["url"] not in fetched}
+    stats["links_extracted"] = len(unique)
     if is_series:
         # برای سریال فقط لینکی شمرده می‌شود که به قسمتی می‌رسد که واقعاً
         # در سایت هست؛ لینک بی‌قسمت (تریلر) یا قسمتِ واردنشده «لینک
         # دانلود» حساب نمی‌شود تا سریال الکی «دارای لینک» منتشر نشود.
         episode_index = _series_episode_index(media)
+        stats["imported_episodes"] = len(episode_index)
         unique = {
             url: link for url, link in unique.items()
             if _resolve_series_episode(episode_index, link) is not None
         }
     created = attach_downloads(media, media_type, list(unique.values())) if unique else 0
-    result = {"pages": len(pages), "found": len(unique), "created": created}
+    result = {
+        "pages": len(pages), "found": len(unique), "created": created,
+        "stats": stats,
+    }
     if not unique:
         if not pages:
             result["reason"] = "صفحه‌ی این اثر در سایت دوم پیدا نشد؛ جستجو با IMDb و عنوان (انگلیسی و فارسی) نتیجه‌ای نداشت."
         elif is_series:
-            result["reason"] = "صفحه‌ی سریال در سایت دوم پیدا شد، اما لینک دانلود قسمت‌هایش خوانده نشد."
+            # پیام دقیقِ همان مرحله‌ای که لینک‌ها در آن حذف شدند، نه یک
+            # پیام کلی؛ تا ادمین بداند مشکل از سایت دوم است یا از داده‌ی ما.
+            if stats["imported_episodes"] == 0:
+                result["reason"] = "قسمت‌های این سریال هنوز در سایت ما ثبت نشده‌اند (فصل/قسمت از TMDB ساخته نشده)؛ لینک دانلود جایی برای وصل‌شدن ندارد."
+            elif stats["links_extracted"]:
+                result["reason"] = (
+                    f"لینک دانلود پیدا شد ({stats['links_extracted']}) اما شماره‌ی قسمت هیچ‌کدام "
+                    f"با {stats['imported_episodes']} قسمت ثبت‌شده‌ی این سریال جور نشد."
+                )
+            elif stats["episode_pages_accepted"]:
+                result["reason"] = "صفحه‌های قسمت این سریال در سایت دوم پیدا و تأیید شدند، اما داخلشان لینک دانلود خوانایی نبود."
+            elif stats["episode_candidates"]:
+                result["reason"] = (
+                    f"روی صفحه‌ی سریال {stats['episode_candidates']} صفحه‌ی قسمت بود، اما هیچ‌کدام "
+                    "مال این سریال تشخیص داده نشدند (اسلاگ/تیتر صفحه و نام فایل‌هایشان با این سریال نخواند)."
+                )
+            elif not stats["series_pages_accepted"]:
+                result["reason"] = "صفحه‌ی پیداشده در سایت دوم مال این سریال تشخیص داده نشد و لینک قسمتی هم روی آن نبود."
+            else:
+                result["reason"] = "صفحه‌ی سریال در سایت دوم پیدا شد، اما لینک دانلود قسمت‌هایش خوانده نشد."
         else:
             result["reason"] = "صفحه‌ی اثر در سایت دوم پیدا شد، اما لینک دانلودی از آن خوانده نشد."
     return result

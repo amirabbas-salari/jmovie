@@ -1564,3 +1564,92 @@ class SeriesStructuralBelongingTest(SeriesForeignLinksTest):
 
         self.assertEqual(Download.objects.count(), 2)
         self.assertFalse(Download.objects.filter(url__icontains="Other.Show").exists())
+
+
+# ---------------------------------------------------------------------------
+# تعلق صفحه از روی نام فایل‌های داخلش + پیام دقیق مرحله‌ی حذف لینک
+# ---------------------------------------------------------------------------
+FILENAME_SERIES_HTML = """<html><head><title>Test Show</title></head><body>
+<h1>Test Show</h1>
+<a href="https://dl.example.com/ep/991/">دانلود قسمت ۱</a>
+<a href="https://dl.example.com/ep/992/">دانلود قسمت ۲</a>
+</body></html>"""
+
+# آدرس عددی و تیتر کلی؛ تعلق فقط از نام فایل فهمیده می‌شود
+FILENAME_EP1_HTML = """<html><head><title>دانلود قسمت ۱</title></head><body>
+<a href="https://dl.example.com/files/Test.Show.S01E01.720p.mkv">دانلود 720p</a>
+</body></html>"""
+
+FILENAME_EP2_FOREIGN_HTML = """<html><head><title>دانلود قسمت ۲</title></head><body>
+<a href="https://dl.example.com/files/Other.Show.S01E02.720p.mkv">دانلود 720p</a>
+</body></html>"""
+
+
+def _fake_fetch_filename(_session, url):
+    if "s=" in url or "/search" in url:
+        return EP_SEARCH_HTML, url
+    if "/ep/991/" in url:
+        return FILENAME_EP1_HTML, url
+    if "/ep/992/" in url:
+        return FILENAME_EP2_FOREIGN_HTML, url
+    if url.rstrip("/").endswith("test-show"):
+        return FILENAME_SERIES_HTML, url
+    return "<html><body></body></html>", url
+
+
+class SeriesFilenameBelongingTest(SeriesForeignLinksTest):
+    """صفحه‌ی قسمت با آدرس عددی از روی نام فایل‌هایش شناخته می‌شود."""
+
+    @patch("content_agent.download_source.fetch_html", side_effect=_fake_fetch_filename)
+    def test_episode_page_accepted_by_its_file_names(self, _fetch):
+        summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 1)
+        self.assertEqual(summary["stats"]["episode_pages_accepted"], 1)
+        self.assertEqual(summary["stats"]["episode_pages_rejected"], 1)
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep1)},
+            {"https://dl.example.com/files/Test.Show.S01E01.720p.mkv"},
+        )
+        self.assertEqual(self._downloads_of(self.ep2).count(), 0)
+
+
+FUTURE_ONLY_SERIES_HTML = """<html><head><title>Test Show</title></head><body>
+<h1>Test Show</h1>
+<p>قسمت ۷: <a href="https://dl.example.com/files/Test.Show.S01E07.720p.mkv">دانلود 720p</a></p>
+</body></html>"""
+
+
+class SeriesScrapeDiagnosticsTest(SeriesForeignLinksTest):
+    """پیام خطا باید دقیقاً مرحله‌ی حذف لینک را بگوید، نه پیام کلی."""
+
+    def test_reason_when_episode_numbers_do_not_match_imported(self):
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            return FUTURE_ONLY_SERIES_HTML, url
+
+        with patch("content_agent.download_source.fetch_html", side_effect=fake):
+            summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 0)
+        self.assertEqual(summary["stats"]["links_extracted"], 1)
+        self.assertIn("جور نشد", summary["reason"])
+
+    def test_reason_when_series_has_no_imported_episodes(self):
+        from series.models import Episode
+
+        Episode.objects.all().delete()
+
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            if "test-show-ep1" in url:
+                return EP1_PAGE_HTML, url
+            if "test-show-ep2" in url:
+                return EP2_PAGE_HTML, url
+            return EPISODE_PAGES_SERIES_HTML, url
+
+        with patch("content_agent.download_source.fetch_html", side_effect=fake):
+            summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 0)
+        self.assertEqual(summary["stats"]["imported_episodes"], 0)
+        self.assertIn("ثبت نشده‌اند", summary["reason"])
