@@ -132,13 +132,42 @@ class AgentImportByImdbView(APIView):
         except AmbiguousImdb as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         except AlreadyExists:
+            # بن‌بست نیست: اثر قبلاً وارد شده، پس گرفتن لینک‌هایش دوباره
+            # تلاش می‌شود و نتیجه‌اش برمی‌گردد؛ ادمین لازم نیست دنبال
+            # پیش‌نویسش بگردد و دکمه‌ی «گرفتن لینک» را پیدا کند.
             existing = self._find_existing(imdb_id)
+            media, media_type = self._find_existing_media(imdb_id)
+            if media is None:
+                return Response(
+                    {
+                        "detail": "این اثر قبلاً در سایت هست.",
+                        "existing": existing,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            item = (
+                AgentImportedItem.objects.filter(
+                    media_type=media_type, object_id=media.id
+                )
+                .order_by("-id")
+                .first()
+            )
+            summary = None
+            try:
+                summary = ContentAgent().fetch_downloads_for(media, media_type)
+            except Exception:
+                summary = None
             return Response(
                 {
-                    "detail": "این اثر قبلاً در سایت هست.",
+                    "detail": "این اثر قبلاً در سایت بود؛ گرفتن لینک دانلودش دوباره تلاش شد.",
+                    "already_exists": True,
                     "existing": existing,
+                    "item": (
+                        AgentImportedItemSerializer(item).data if item else None
+                    ),
+                    "summary": summary,
                 },
-                status=status.HTTP_409_CONFLICT,
+                status=status.HTTP_200_OK,
             )
         return Response(
             {
@@ -149,25 +178,33 @@ class AgentImportByImdbView(APIView):
         )
 
     @staticmethod
-    def _find_existing(imdb_id):
-        """اثر موجود با این IMDb برای لینک مستقیم ویرایش در پنل."""
+    def _find_existing_media(imdb_id):
+        """(اثر موجود با این IMDb، نوعش) یا (None, None)."""
         from .services import normalize_imdb_id
 
         try:
             normalized = normalize_imdb_id(imdb_id)
         except ValueError:
-            return None
+            return None, None
         for model, media_type in ((Movie, "movie"), (Series, "series")):
             media = model.objects.filter(imdb_id=normalized).first()
             if media is not None:
-                base = "movies" if media_type == "movie" else "series"
-                return {
-                    "media_type": media_type,
-                    "id": media.id,
-                    "title": media.title,
-                    "admin_edit_path": f"/admin/{base}/{media.id}/edit",
-                }
-        return None
+                return media, media_type
+        return None, None
+
+    @staticmethod
+    def _find_existing(imdb_id):
+        """اثر موجود با این IMDb برای لینک مستقیم ویرایش در پنل."""
+        media, media_type = AgentImportByImdbView._find_existing_media(imdb_id)
+        if media is None:
+            return None
+        base = "movies" if media_type == "movie" else "series"
+        return {
+            "media_type": media_type,
+            "id": media.id,
+            "title": media.title,
+            "admin_edit_path": f"/admin/{base}/{media.id}/edit",
+        }
 
 
 class AgentRunListView(APIView):
