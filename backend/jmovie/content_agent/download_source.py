@@ -568,7 +568,11 @@ def _episode_page_candidates(html, page_url):
             continue
         next_start = spans[i + 1][2] if i + 1 < len(spans) else end + 400
         tail = _strip_tags(html[end:next_start])[:180]
-        label = f"{text} {tail}"
+        # متن قبل از لینک هم مهم است: در جدول‌های قسمت‌ها شماره‌ی قسمت
+        # معمولاً سلول/برچسب قبل از دکمه‌ی «دانلود» است، نه بعدش.
+        prev_end = spans[i - 1][3] if i else max(0, _start - 800)
+        pre = _strip_tags(html[prev_end:_start])[-180:]
+        label = f"{pre} {text} {tail}"
         season, episode = _season_episode_of(f"{unquote(absolute)} {label}")
         href_tokens = set(_normalize(unquote(absolute)).split())
         in_family = bool(own_tokens) and own_tokens <= href_tokens
@@ -579,7 +583,15 @@ def _episode_page_candidates(html, page_url):
             or "/episode" in parsed.path.lower()
             or in_family
         )
-        if not looks_episode or absolute in seen:
+        # صفحه‌ی فصل («دانلود فصل ۱») هم کاندیداست؛ قسمت‌هایش یک سطح
+        # عمیق‌تر از داخل خودش خوانده می‌شوند.
+        looks_season = episode is None and (
+            season is not None
+            or "فصل" in label
+            or "season" in label.lower()
+            or "/season" in parsed.path.lower()
+        )
+        if not (looks_episode or looks_season) or absolute in seen:
             continue
         seen.add(absolute)
         out.append((absolute, season, episode))
@@ -854,61 +866,85 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
         if is_series:
             # لینک دانلود سریال روی قسمت‌هاست و معمولاً هر قسمت صفحه‌ی جدا
             # دارد؛ صفحه‌ی هر قسمت دنبال می‌شود و لینک‌هایش با شماره‌ی
-            # همان قسمت (از لینک ارجاع‌دهنده) برچسب می‌خورند.
-            foreign_pages = 0
-            candidates = sorted(
-                _episode_page_candidates(html, final_url),
-                key=episode_candidate_priority,
-            )
-            stats["episode_candidates"] += len(candidates)
-            for ep_url, ep_season, ep_episode in candidates:
-                if ep_url in fetched:
-                    continue
-                fetched.add(ep_url)
-                try:
-                    sub_html, sub_final = fetch_html(session, ep_url)
-                except Exception:
-                    continue
-                sub_links = extract_download_links(sub_html, sub_final)
-                if not (
-                    page_belongs_to_series(sub_html, sub_final)
-                    or page_links_belong(sub_links)
-                ):
-                    # به‌احتمال زیاد لینک ستون کناریِ سریال دیگری است؛ بعد
-                    # از چند مورد از این‌ها دیگر ادامه نمی‌دهیم.
-                    stats["episode_pages_rejected"] += 1
-                    foreign_pages += 1
-                    if foreign_pages >= 8:
+            # همان قسمت (از لینک ارجاع‌دهنده) برچسب می‌خورند. صفحه‌ی فصل
+            # هم ممکن است واسط باشد؛ قسمت‌هایش یک سطح عمیق‌تر خوانده
+            # می‌شوند (سقف عمق ۲، تا خزیدن بی‌نهایت نشود).
+            foreign = {"count": 0}
+
+            def follow_episode_pages(from_html, from_url, depth):
+                found_links = []
+                candidates = sorted(
+                    _episode_page_candidates(from_html, from_url),
+                    key=episode_candidate_priority,
+                )
+                if depth == 0:
+                    stats["episode_candidates"] += len(candidates)
+                for ep_url, ep_season, ep_episode in candidates:
+                    if foreign["count"] >= 8:
                         break
-                    continue
-                stats["episode_pages_accepted"] += 1
-                if not sub_links:
-                    # صفحه‌ی قسمت هم ممکن است فقط دکمه‌ی «دانلود» داشته باشد
-                    for dl_url in _download_page_candidates(sub_html, sub_final):
-                        if dl_url in fetched:
-                            continue
-                        fetched.add(dl_url)
-                        try:
-                            dl_html, dl_final = fetch_html(session, dl_url)
-                        except Exception:
-                            continue
-                        dl_links = extract_download_links(dl_html, dl_final)
-                        if not (
-                            page_belongs_to_series(dl_html, dl_final)
-                            or page_links_belong(dl_links)
-                        ):
-                            continue
-                        sub_links.extend(dl_links)
-                        if sub_links:
-                            break
-                for link in sub_links:
-                    if link.get("episode") is None and ep_episode is not None:
-                        link["episode"] = ep_episode
-                        if link.get("season") is None:
+                    if ep_url in fetched:
+                        continue
+                    fetched.add(ep_url)
+                    try:
+                        sub_html, sub_final = fetch_html(session, ep_url)
+                    except Exception:
+                        continue
+                    sub_links = extract_download_links(sub_html, sub_final)
+                    if not (
+                        page_belongs_to_series(sub_html, sub_final)
+                        or page_links_belong(sub_links)
+                    ):
+                        # به‌احتمال زیاد لینک ستون کناریِ سریال دیگری است؛
+                        # بعد از چند مورد از این‌ها دیگر ادامه نمی‌دهیم.
+                        stats["episode_pages_rejected"] += 1
+                        foreign["count"] += 1
+                        continue
+                    stats["episode_pages_accepted"] += 1
+                    if not sub_links:
+                        # صفحه‌ی قسمت هم ممکن است فقط دکمه‌ی «دانلود» داشته باشد
+                        for dl_url in _download_page_candidates(sub_html, sub_final):
+                            if dl_url in fetched:
+                                continue
+                            fetched.add(dl_url)
+                            try:
+                                dl_html, dl_final = fetch_html(session, dl_url)
+                            except Exception:
+                                continue
+                            dl_links = extract_download_links(dl_html, dl_final)
+                            if not (
+                                page_belongs_to_series(dl_html, dl_final)
+                                or page_links_belong(dl_links)
+                            ):
+                                continue
+                            sub_links.extend(dl_links)
+                            if sub_links:
+                                break
+                    if depth < 2:
+                        # صفحه‌ی فصل/واسط: «لینک»های استخراج‌شده‌اش ممکن است
+                        # خودِ صفحه‌های قسمت باشند (روی هاست dl.* هر انکری
+                        # شبیه لینک دانلود دیده می‌شود)؛ آن‌ها دانلود نیستند
+                        # و باید دنبال شوند، نه اینکه وصل شوند.
+                        inner_urls = {
+                            c[0] for c in _episode_page_candidates(sub_html, sub_final)
+                        }
+                        own_links = [
+                            link for link in sub_links if link["url"] not in inner_urls
+                        ]
+                        if len(own_links) != len(sub_links) or not own_links:
+                            sub_links = own_links + follow_episode_pages(
+                                sub_html, sub_final, depth + 1
+                            )
+                    for link in sub_links:
+                        if link.get("episode") is None and ep_episode is not None:
+                            link["episode"] = ep_episode
+                            if link.get("season") is None:
+                                link["season"] = ep_season
+                        elif link.get("season") is None and ep_season is not None:
                             link["season"] = ep_season
-                    elif link.get("season") is None and ep_season is not None:
-                        link["season"] = ep_season
-                    links.append(link)
+                        found_links.append(link)
+                return found_links
+
+            links.extend(follow_episode_pages(html, final_url, 0))
         if not links or is_series:
             # صفحه‌ی اثر گاهی فقط دکمه‌ی «دانلود» دارد و لینک‌ها صفحه‌ی جدا
             # هستند؛ برای سریال این صفحه (فهرست همه‌ی قسمت‌ها) حتی وقتی روی
@@ -975,7 +1011,13 @@ def scrape_downloads(base_url, media, media_type, *, imdb_id="", original_title=
             elif not stats["series_pages_accepted"]:
                 result["reason"] = "صفحه‌ی پیداشده در سایت دوم مال این سریال تشخیص داده نشد و لینک قسمتی هم روی آن نبود."
             else:
-                result["reason"] = "صفحه‌ی سریال در سایت دوم پیدا شد، اما لینک دانلود قسمت‌هایش خوانده نشد."
+                result["reason"] = "صفحه‌ی سریال در سایت دوم پیدا و تأیید شد، اما روی آن هیچ لینک دانلود یا صفحه‌ی قسمتی خوانده نشد؛ احتمالاً فهرست قسمت‌ها با جاوااسکریپت بارگذاری می‌شود یا ساختار صفحه با الگوهای فعلی نمی‌خواند."
+            result["reason"] += (
+                f" (تشخیص: صفحه‌ی سریال قبول‌شده {stats['series_pages_accepted']}، "
+                f"کاندیدای قسمت {stats['episode_candidates']}، صفحه‌ی قسمت قبول‌شده "
+                f"{stats['episode_pages_accepted']}، ردشده {stats['episode_pages_rejected']}، "
+                f"لینک استخراج‌شده {stats['links_extracted']}، قسمت ثبت‌شده {stats['imported_episodes']})"
+            )
         else:
             result["reason"] = "صفحه‌ی اثر در سایت دوم پیدا شد، اما لینک دانلودی از آن خوانده نشد."
     return result

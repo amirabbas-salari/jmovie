@@ -152,6 +152,19 @@ export default function Agent() {
       const item = res.item || {}
       const summary = res.summary || {}
       setImdbId("")
+      if (res.already_exists) {
+        // اثر قبلاً وارد شده بود؛ بک‌اند گرفتن لینک‌هایش را دوباره تلاش
+        // کرده و نتیجه همین‌جا گفته می‌شود (قبلاً بن‌بست 409 بود).
+        const title = item.title || res.existing?.title || "این اثر"
+        setNotice(
+          summary.found
+            ? `«${title}» قبلاً در سایت بود؛ این بار ${formatNumber(summary.found)} لینک دانلود پیدا و وصل شد${summary.created ? ` (${formatNumber(summary.created)} لینک جدید)` : ""}.`
+            : `«${title}» قبلاً در سایت هست؛ ${summary.reason || summary.error || "این بار هم لینک دانلودی پیدا نشد."}`
+        )
+        setTab(item.status === "approved" ? "approved" : "pending")
+        await load(true)
+        return
+      }
       setTab(item.status === "approved" ? "approved" : "pending")
       setNotice(
         item.status === "approved"
