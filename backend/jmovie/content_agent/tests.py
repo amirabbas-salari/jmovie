@@ -1172,12 +1172,17 @@ class ImportByImdbApiTest(TestCase):
         self.assertEqual(res.data["item"]["status"], "pending")
         self.assertTrue(Series.objects.filter(tmdb_id=999101).exists())
 
-        # بار دوم: تکراری با لینک ویرایش اثر موجود
+        # بار دوم: تکراری دیگر بن‌بست 409 نیست؛ گرفتن لینک‌های اثر موجود
+        # دوباره تلاش می‌شود و نتیجه‌اش در همان پاسخ برمی‌گردد.
         res2 = self.client.post(
             "/agent/import-by-imdb/", {"imdb_id": "tt9990101"}, format="json"
         )
-        self.assertEqual(res2.status_code, 409)
+        self.assertEqual(res2.status_code, 200)
+        self.assertTrue(res2.data["already_exists"])
         self.assertIn("/admin/series/", res2.data["existing"]["admin_edit_path"])
+        self.assertIsNotNone(res2.data["summary"])
+        self.assertEqual(res2.data["item"]["tmdb_id"], 999101)
+        self.assertEqual(Series.objects.filter(tmdb_id=999101).count(), 1)
 
     def test_import_endpoint_validation_and_not_found(self):
         res = self.client.post(
@@ -1653,3 +1658,86 @@ class SeriesScrapeDiagnosticsTest(SeriesForeignLinksTest):
         self.assertEqual(summary["found"], 0)
         self.assertEqual(summary["stats"]["imported_episodes"], 0)
         self.assertIn("ثبت نشده‌اند", summary["reason"])
+
+
+# ---------------------------------------------------------------------------
+# چیدمان‌های واقعی صفحه‌ی سریال: شماره‌ی قسمت در سلول قبل از دکمه‌ی دانلود
+# (جدول) و صفحه‌ی واسط فصل («دانلود فصل ۱» -> فهرست قسمت‌ها)
+# ---------------------------------------------------------------------------
+TABLE_SERIES_HTML = """<html><head><title>Test Show</title></head><body>
+<h1>Test Show</h1>
+<table>
+<tr><td>قسمت ۱</td><td><a href="https://dl.example.com/ep/991/">دانلود</a></td></tr>
+<tr><td>قسمت ۲</td><td><a href="https://dl.example.com/ep/992/">دانلود</a></td></tr>
+</table>
+</body></html>"""
+
+TABLE_EP1_HTML = """<html><head><title>دانلود قسمت ۱</title></head><body>
+<a href="https://dl.example.com/files/Test.Show.S01E01.720p.mkv">دانلود 720p</a>
+</body></html>"""
+
+TABLE_EP2_HTML = """<html><head><title>دانلود قسمت ۲</title></head><body>
+<a href="https://dl.example.com/files/Test.Show.S01E02.720p.mkv">دانلود 720p</a>
+</body></html>"""
+
+SEASON_SERIES_HTML = """<html><head><title>Test Show</title></head><body>
+<h1>Test Show</h1>
+<a href="https://dl.example.com/season/test-show-s1/">دانلود فصل ۱</a>
+</body></html>"""
+
+SEASON_PAGE_HTML = """<html><head><title>Test Show فصل ۱</title></head><body>
+<h1>Test Show - فصل ۱</h1>
+<a href="https://dl.example.com/ep/test-show-ep1/">دانلود قسمت ۱</a>
+<a href="https://dl.example.com/ep/test-show-ep2/">دانلود قسمت ۲</a>
+</body></html>"""
+
+
+class SeriesPageLayoutsTest(SeriesForeignLinksTest):
+    """رگرسیون چیدمان جدولی و صفحه‌ی واسط فصل."""
+
+    def test_episode_number_in_cell_before_download_button(self):
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            if "/ep/991/" in url:
+                return TABLE_EP1_HTML, url
+            if "/ep/992/" in url:
+                return TABLE_EP2_HTML, url
+            return TABLE_SERIES_HTML, url
+
+        with patch("content_agent.download_source.fetch_html", side_effect=fake):
+            summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 2)
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep1)},
+            {"https://dl.example.com/files/Test.Show.S01E01.720p.mkv"},
+        )
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep2)},
+            {"https://dl.example.com/files/Test.Show.S01E02.720p.mkv"},
+        )
+
+    def test_episodes_behind_season_page(self):
+        def fake(_session, url):
+            if "s=" in url or "/search" in url:
+                return EP_SEARCH_HTML, url
+            if "test-show-ep1" in url:
+                return EP1_PAGE_HTML, url
+            if "test-show-ep2" in url:
+                return EP2_PAGE_HTML, url
+            if "/season/" in url:
+                return SEASON_PAGE_HTML, url
+            return SEASON_SERIES_HTML, url
+
+        with patch("content_agent.download_source.fetch_html", side_effect=fake):
+            summary = ContentAgent().fetch_downloads_for(self.show, "series")
+        self.assertEqual(summary["found"], 3)
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep1)},
+            {"https://dl.example.com/files/opaque-111.mkv",
+             "https://dl.example.com/files/opaque-112.mkv"},
+        )
+        self.assertEqual(
+            {d.url for d in self._downloads_of(self.ep2)},
+            {"https://dl.example.com/files/opaque-211.mkv"},
+        )
